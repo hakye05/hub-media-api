@@ -37,4 +37,8 @@ public class AuthController {
         return new AvailabilityResponse(userService.isEmailAvailable(email));
     }
 
+    @GetMapping("/check-username")
+    public AvailabilityResponse checkUsername(@RequestParam String username) {
+        return new AvailabilityResponse(userService.isUsernameAvailable(username));
+    }
 }
