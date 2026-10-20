@@ -1,5 +1,6 @@
 package com.hakye.mediahub.api.user;
 
+import com.hakye.mediahub.api.common.NotFoundException;
 import com.hakye.mediahub.api.common.UnauthorizedException;
 import org.springframework.stereotype.Service;
 
@@ -28,5 +29,10 @@ public class UserService {
     public User getById(UUID id) {
         return userRepository.findById(id)
                 .orElseThrow(() -> new UnauthorizedException("Account no longer exists"));
+    }
+
+    public User getByUsernameOrThrow(String username) {
+        return userRepository.findByUsernameIgnoreCase(UserValidator.normalizeString(username))
+                .orElseThrow(() -> new NotFoundException("User not found"));
     }
 }
