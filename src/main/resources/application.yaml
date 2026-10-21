@@ -25,6 +25,8 @@ app:
     access-ttl-minutes: 60
   cors:
     allowed-origin: http://localhost:3000
+  media:
+    allowed-hosts: ""
 
 management:
   endpoints:
