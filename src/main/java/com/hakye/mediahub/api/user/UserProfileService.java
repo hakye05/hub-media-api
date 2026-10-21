@@ -4,15 +4,15 @@ import com.hakye.mediahub.api.common.exceptions.BadRequestException;
 import com.hakye.mediahub.api.common.exceptions.ConflictException;
 import com.hakye.mediahub.api.follow.FollowId;
 import com.hakye.mediahub.api.follow.FollowRepository;
-import com.hakye.mediahub.api.user.dto.ChangeEmailRequest;
-import com.hakye.mediahub.api.user.dto.PublicProfileResponse;
-import com.hakye.mediahub.api.user.dto.UpdateProfileRequest;
-import com.hakye.mediahub.api.user.dto.UserResponse;
+import com.hakye.mediahub.api.media.UploadKind;
+import com.hakye.mediahub.api.media.UploadService;
+import com.hakye.mediahub.api.user.dto.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.net.URI;
 import java.util.List;
@@ -25,18 +25,21 @@ public class UserProfileService {
     private final UserService userService;
     private final FollowRepository followRepository;
     private final PasswordEncoder passwordEncoder;
-    private final List<String> allowedAvatarHosts;
+    private final UploadService uploadService;
+    private final TransactionTemplate transactionTemplate;
 
     public UserProfileService(UserRepository userRepository,
                               UserService userService,
                               FollowRepository followRepository,
                               PasswordEncoder passwordEncoder,
-                              @Value("${app.media.allowed-hosts:}") List<String> allowedAvatarHosts) {
+                              UploadService uploadService,
+                              TransactionTemplate transactionTemplate) {
         this.userRepository = userRepository;
         this.userService = userService;
         this.followRepository = followRepository;
         this.passwordEncoder = passwordEncoder;
-        this.allowedAvatarHosts = allowedAvatarHosts;
+        this.uploadService = uploadService;
+        this.transactionTemplate = transactionTemplate;
     }
 
     @Transactional(readOnly = true)
@@ -123,35 +126,33 @@ public class UserProfileService {
         return UserResponse.from(user);
     }
 
-    @Transactional
-    public UserResponse setAvatar(UUID userId, String avatarUrl) {
-        String url = avatarUrl.trim();
-        validateAvatarUrl(url);
-        User user = userService.getById(userId);
-        user.setAvatarUrl(url);
-        return UserResponse.from(user);
+    public UserResponse setAvatar(UUID userId, String key) {
+        String newUrl = uploadService.confirm(userId, UploadKind.AVATAR, key);
+
+        AvatarChange change = transactionTemplate.execute(status -> {
+            User user = userService.getById(userId);
+            String previous = user.getAvatarUrl();
+            user.setAvatarUrl(newUrl);
+            return new AvatarChange(UserResponse.from(user), previous);
+        });
+
+        // Only after the DB change is committed. Skip if the same file was re-confirmed.
+        if (!newUrl.equals(change.previousUrl())) {
+            uploadService.deleteByUrl(change.previousUrl());
+        }
+        return change.response();
     }
 
     @Transactional
     public UserResponse removeAvatar(UUID userId) {
-        User user = userService.getById(userId);
-        user.setAvatarUrl(null);
-        return UserResponse.from(user);
-    }
+        AvatarChange change = transactionTemplate.execute(status -> {
+            User user = userService.getById(userId);
+            String previous = user.getAvatarUrl();
+            user.setAvatarUrl(null);
+            return new AvatarChange(UserResponse.from(user), previous);
+        });
 
-    private void validateAvatarUrl(String url) {
-        URI uri;
-        try {
-            uri = URI.create(url);
-        } catch (IllegalArgumentException e) {
-            throw new BadRequestException("Avatar URL is not valid");
-        }
-        if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null || uri.getUserInfo() != null) {
-            throw new BadRequestException("Avatar URL must be a valid https URL");
-        }
-        if (!allowedAvatarHosts.isEmpty()
-                && allowedAvatarHosts.stream().noneMatch(h -> h.equalsIgnoreCase(uri.getHost()))) {
-            throw new BadRequestException("Avatar must be hosted on an allowed domain");
-        }
+        uploadService.deleteByUrl(change.previousUrl());
+        return change.response();
     }
 }
