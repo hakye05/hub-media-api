@@ -1,5 +1,9 @@
 package com.hakye.mediahub.api.common;
 
+import com.hakye.mediahub.api.common.exceptions.BadRequestException;
+import com.hakye.mediahub.api.common.exceptions.ConflictException;
+import com.hakye.mediahub.api.common.exceptions.NotFoundException;
+import com.hakye.mediahub.api.common.exceptions.UnauthorizedException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.converter.HttpMessageNotReadableException;

@@ -1,7 +1,7 @@
 package com.hakye.mediahub.api.user;
 
-import com.hakye.mediahub.api.common.NotFoundException;
-import com.hakye.mediahub.api.common.UnauthorizedException;
+import com.hakye.mediahub.api.common.exceptions.NotFoundException;
+import com.hakye.mediahub.api.common.exceptions.UnauthorizedException;
 import org.springframework.stereotype.Service;
 
 import java.util.UUID;

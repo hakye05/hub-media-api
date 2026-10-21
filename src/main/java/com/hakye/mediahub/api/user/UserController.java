@@ -1,6 +1,7 @@
 package com.hakye.mediahub.api.user;
 
 import com.hakye.mediahub.api.auth.dto.AvailabilityResponse;
+import com.hakye.mediahub.api.common.utils.CurrentUser;
 import com.hakye.mediahub.api.follow.FollowService;
 import com.hakye.mediahub.api.user.dto.*;
 import org.springframework.http.HttpStatus;
@@ -29,19 +30,19 @@ public class UserController {
 
     @GetMapping("/me")
     public UserResponse me(@AuthenticationPrincipal Jwt jwt) {
-        User user = userService.getById(UUID.fromString(jwt.getSubject()));
+        User user = userService.getById(CurrentUser.requireId(jwt));
         return UserResponse.from(user);
     }
 
     @PostMapping("/{username}/follow")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void follow(@PathVariable String username, @AuthenticationPrincipal Jwt jwt) {
-        followService.follow(UUID.fromString(jwt.getSubject()), username);
+        followService.follow(CurrentUser.requireId(jwt), username);
     }
 
     @DeleteMapping("/{username}/follow")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void unfollow(@PathVariable String username, @AuthenticationPrincipal Jwt jwt) {
-        followService.unfollow(UUID.fromString(jwt.getSubject()), username);
+        followService.unfollow(CurrentUser.requireId(jwt), username);
     }
 }

@@ -1,4 +1,4 @@
-package com.hakye.mediahub.api.common;
+package com.hakye.mediahub.api.common.exceptions;
 
 public class ConflictException extends RuntimeException {
     public ConflictException(String message) {

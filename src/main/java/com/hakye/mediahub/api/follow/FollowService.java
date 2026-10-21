@@ -2,7 +2,7 @@ package com.hakye.mediahub.api.follow;
 
 import java.util.UUID;
 
-import com.hakye.mediahub.api.common.BadRequestException;
+import com.hakye.mediahub.api.common.exceptions.BadRequestException;
 import com.hakye.mediahub.api.user.User;
 import com.hakye.mediahub.api.user.UserService;
 import org.springframework.stereotype.Service;
