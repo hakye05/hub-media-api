@@ -57,7 +57,7 @@ public class UserController {
     @PutMapping("/me/avatar")
     public UserResponse setAvatar(@AuthenticationPrincipal Jwt jwt,
                                   @Valid @RequestBody ChangeAvatarRequest request) {
-        return profileService.setAvatar(CurrentUser.requireId(jwt), request.avatarUrl());
+        return profileService.setAvatar(CurrentUser.requireId(jwt), request.key());
     }
 
     @DeleteMapping("/me/avatar")
