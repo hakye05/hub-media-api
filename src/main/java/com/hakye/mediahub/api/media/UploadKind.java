@@ -2,7 +2,7 @@ package com.hakye.mediahub.api.media;
 
 public enum UploadKind {
 
-    AVATAR("avatars", 1024L * 1024);
+    AVATAR("avatars", 400L * 1024);
 
     private final String prefix;
     private final long maxBytes;
