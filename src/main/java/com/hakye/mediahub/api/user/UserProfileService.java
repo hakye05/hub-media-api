@@ -4,18 +4,13 @@ import com.hakye.mediahub.api.common.exceptions.BadRequestException;
 import com.hakye.mediahub.api.common.exceptions.ConflictException;
 import com.hakye.mediahub.api.follow.FollowId;
 import com.hakye.mediahub.api.follow.FollowRepository;
-import com.hakye.mediahub.api.media.UploadKind;
-import com.hakye.mediahub.api.media.UploadService;
+import com.hakye.mediahub.api.media.ObjectStorageService;
 import com.hakye.mediahub.api.user.dto.*;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionTemplate;
 
-import java.net.URI;
-import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -25,21 +20,18 @@ public class UserProfileService {
     private final UserService userService;
     private final FollowRepository followRepository;
     private final PasswordEncoder passwordEncoder;
-    private final UploadService uploadService;
-    private final TransactionTemplate transactionTemplate;
+    private final ObjectStorageService storage;
 
     public UserProfileService(UserRepository userRepository,
                               UserService userService,
                               FollowRepository followRepository,
                               PasswordEncoder passwordEncoder,
-                              UploadService uploadService,
-                              TransactionTemplate transactionTemplate) {
+                              ObjectStorageService storage) {
         this.userRepository = userRepository;
         this.userService = userService;
         this.followRepository = followRepository;
         this.passwordEncoder = passwordEncoder;
-        this.uploadService = uploadService;
-        this.transactionTemplate = transactionTemplate;
+        this.storage = storage;
     }
 
     @Transactional(readOnly = true)
@@ -54,7 +46,7 @@ public class UserProfileService {
                 user.getUsername(),
                 user.getDisplayName(),
                 user.getBio(),
-                user.getAvatarUrl(),
+                storage.publicUrl(user.getAvatarKey()),
                 user.getCreatedAt(),
                 followRepository.countFollowers(user.getId()),
                 followRepository.countFollowing(user.getId()),
@@ -80,7 +72,7 @@ public class UserProfileService {
             String bio = req.bio().trim();
             user.setBio(bio.isEmpty() ? null : bio);
         }
-        return UserResponse.from(user);
+        return toResponse(user);
     }
 
     @Transactional
@@ -89,7 +81,7 @@ public class UserProfileService {
         String normalized = UserValidator.normalizeString(requested);
 
         if (normalized.equals(user.getUsername())) {
-            return UserResponse.from(user);
+            return toResponse(user);
         }
         if (!userService.isUsernameAvailable(normalized)) {
             throw new ConflictException("Username is not available");
@@ -100,7 +92,7 @@ public class UserProfileService {
         } catch (DataIntegrityViolationException e) {
             throw new ConflictException("Username is not available");
         }
-        return UserResponse.from(user);
+        return toResponse(user);
     }
 
     @Transactional
@@ -112,7 +104,7 @@ public class UserProfileService {
         }
         String email = UserValidator.normalizeString(req.newEmail());
         if (email.equals(user.getEmail())) {
-            return UserResponse.from(user);
+            return toResponse(user);
         }
         if (userRepository.existsByEmailIgnoreCase(email)) {
             throw new ConflictException("Email is already registered");
@@ -123,36 +115,15 @@ public class UserProfileService {
         } catch (DataIntegrityViolationException e) {
             throw new ConflictException("Email is already registered");
         }
-        return UserResponse.from(user);
+        return toResponse(user);
     }
 
-    public UserResponse setAvatar(UUID userId, String key) {
-        String newUrl = uploadService.confirm(userId, UploadKind.AVATAR, key);
-
-        AvatarChange change = transactionTemplate.execute(status -> {
-            User user = userService.getById(userId);
-            String previous = user.getAvatarUrl();
-            user.setAvatarUrl(newUrl);
-            return new AvatarChange(UserResponse.from(user), previous);
-        });
-
-        // Only after the DB change is committed. Skip if the same file was re-confirmed.
-        if (!newUrl.equals(change.previousUrl())) {
-            uploadService.deleteByUrl(change.previousUrl());
-        }
-        return change.response();
+    @Transactional(readOnly = true)
+    public UserResponse getMe(UUID userId) {
+        return toResponse(userService.getById(userId));
     }
 
-    @Transactional
-    public UserResponse removeAvatar(UUID userId) {
-        AvatarChange change = transactionTemplate.execute(status -> {
-            User user = userService.getById(userId);
-            String previous = user.getAvatarUrl();
-            user.setAvatarUrl(null);
-            return new AvatarChange(UserResponse.from(user), previous);
-        });
-
-        uploadService.deleteByUrl(change.previousUrl());
-        return change.response();
+    private UserResponse toResponse(User user) {
+        return UserResponse.from(user, storage.publicUrl(user.getAvatarKey()));
     }
 }

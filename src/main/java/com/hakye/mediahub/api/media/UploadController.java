@@ -1,15 +1,16 @@
 package com.hakye.mediahub.api.media;
 
 import com.hakye.mediahub.api.common.utils.CurrentUser;
-import com.hakye.mediahub.api.media.dto.PresignUploadRequest;
+import com.hakye.mediahub.api.media.dto.CreateUploadRequest;
 import com.hakye.mediahub.api.media.dto.PresignedUploadResponse;
+import com.hakye.mediahub.api.media.dto.UploadResponse;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.UUID;
 
 @RestController
 @RequestMapping("api/uploads")
@@ -21,9 +22,15 @@ public class UploadController {
         this.uploadService = uploadService;
     }
 
-    @PostMapping("/presign")
-    public PresignedUploadResponse presign(@AuthenticationPrincipal Jwt jwt,
-                                           @Valid @RequestBody PresignUploadRequest request) {
-        return uploadService.presign(CurrentUser.requireId(jwt), request);
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    public PresignedUploadResponse create(@AuthenticationPrincipal Jwt jwt,
+                                          @Valid @RequestBody CreateUploadRequest request) {
+        return uploadService.create(CurrentUser.requireId(jwt), request);
+    }
+
+    @PostMapping("/{id}/complete")
+    public UploadResponse complete(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
+        return uploadService.complete(CurrentUser.requireId(jwt), id);
     }
 }

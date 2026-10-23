@@ -1,14 +1,14 @@
 package com.hakye.mediahub.api.media.dto;
 
-
+import java.time.Instant;
 import java.util.Map;
+import java.util.UUID;
 
 public record PresignedUploadResponse(
-        String key,
+        UUID uploadId,
         String uploadUrl,
         String method,
         Map<String, String> headers,
-        long expiresInSeconds,
-        long maxBytes
+        Instant expiresAt
 ) {
 }

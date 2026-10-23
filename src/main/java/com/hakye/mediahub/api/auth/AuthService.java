@@ -1,6 +1,7 @@
 package com.hakye.mediahub.api.auth;
 
 import com.hakye.mediahub.api.auth.dto.AuthResponse;
+import com.hakye.mediahub.api.auth.dto.AuthUserResponse;
 import com.hakye.mediahub.api.auth.dto.LoginRequest;
 import com.hakye.mediahub.api.auth.dto.RegisterRequest;
 import com.hakye.mediahub.api.common.exceptions.ConflictException;
@@ -9,7 +10,6 @@ import com.hakye.mediahub.api.user.User;
 import com.hakye.mediahub.api.user.UserRepository;
 import com.hakye.mediahub.api.user.UserService;
 import com.hakye.mediahub.api.user.UserValidator;
-import com.hakye.mediahub.api.user.dto.UserResponse;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -66,6 +66,6 @@ public class AuthService {
 
     private AuthResponse toResponse(User user) {
         JwtService.IssuedToken token = jwtService.issue(user);
-        return new AuthResponse(token.value(), "Bearer", token.expiresInSeconds(), UserResponse.from(user));
+        return new AuthResponse(token.value(), "Bearer", token.expiresInSeconds(), AuthUserResponse.from(user));
     }
 }

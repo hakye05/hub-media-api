@@ -2,6 +2,7 @@ package com.hakye.mediahub.api.user;
 
 import com.hakye.mediahub.api.common.dto.PageResponse;
 import com.hakye.mediahub.api.follow.FollowRepository;
+import com.hakye.mediahub.api.media.ObjectStorageService;
 import com.hakye.mediahub.api.user.dto.ProfileSummaryResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Component;
@@ -15,9 +16,11 @@ import java.util.UUID;
 public class ProfileSummaryMapper {
 
     private final FollowRepository followRepository;
+    private final ObjectStorageService storage;
 
-    public ProfileSummaryMapper(FollowRepository followRepository) {
+    public ProfileSummaryMapper(FollowRepository followRepository, ObjectStorageService storage) {
         this.followRepository = followRepository;
+        this.storage = storage;
     }
 
     /** viewerId is null for guests. Uses one query to resolve follow state for the whole page. */
@@ -31,10 +34,8 @@ public class ProfileSummaryMapper {
         }
 
         List<ProfileSummaryResponse> items = users.stream()
-                .map(u -> ProfileSummaryResponse.of(
-                        u,
-                        u.getId().equals(viewerId),
-                        followedByViewer.contains(u.getId())))
+                .map(u -> ProfileSummaryResponse.of(u, storage.publicUrl(u.getAvatarKey()),
+                        u.getId().equals(viewerId), followedByViewer.contains(u.getId())))
                 .toList();
         return PageResponse.of(items, page);
     }

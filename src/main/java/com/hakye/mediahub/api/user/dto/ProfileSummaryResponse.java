@@ -12,8 +12,8 @@ public record ProfileSummaryResponse(
         boolean isSelf,
         boolean isFollowing
 ) {
-    public static ProfileSummaryResponse of(User user, boolean isSelf, boolean isFollowing) {
+    public static ProfileSummaryResponse of(User user, String avatarUrl, boolean isSelf, boolean isFollowing) {
         return new ProfileSummaryResponse(user.getId(), user.getUsername(),
-                user.getDisplayName(), user.getAvatarUrl(), isSelf, isFollowing);
+                user.getDisplayName(), avatarUrl, isSelf, isFollowing);
     }
 }

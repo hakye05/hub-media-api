@@ -18,7 +18,7 @@ public record UserResponse(
         Instant createdAt,
         Instant updatedAt
 ) {
-    public static UserResponse from(User user) {
+    public static UserResponse from(User user, String avatarUrl) {
         return new UserResponse(
                 user.getId(),
                 user.getEmail(),
@@ -27,7 +27,7 @@ public record UserResponse(
                 user.getAge(),
                 user.getGender(),
                 user.getBio(),
-                user.getAvatarUrl(),
+                avatarUrl,
                 user.getCreatedAt(),
                 user.getUpdatedAt());
     }

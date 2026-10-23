@@ -1,79 +1,133 @@
 package com.hakye.mediahub.api.media;
 
 import com.hakye.mediahub.api.common.exceptions.BadRequestException;
-import com.hakye.mediahub.api.media.dto.PresignUploadRequest;
+import com.hakye.mediahub.api.common.exceptions.ConflictException;
+import com.hakye.mediahub.api.common.exceptions.NotFoundException;
+import com.hakye.mediahub.api.media.dto.CreateUploadRequest;
 import com.hakye.mediahub.api.media.dto.PresignedUploadResponse;
-import com.hakye.mediahub.api.media.dto.StoredObject;
+import com.hakye.mediahub.api.media.dto.UploadResponse;
+import com.hakye.mediahub.api.user.User;
+import com.hakye.mediahub.api.user.UserService;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionTemplate;
+import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
 
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
-import java.util.regex.Pattern;
 
 @Service
 public class UploadService {
 
-    private static final Pattern FILE_NAME = Pattern.compile("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.(jpg|png|webp)$");
+    /** Must stay far below the 1-day tmp/ lifecycle TTL. */
+    private static final Duration FINALIZE_WINDOW = Duration.ofHours(1);
+    private static final String IMMUTABLE_CACHE = "public, max-age=31536000, immutable";
 
+    private final UploadRepository uploads;
+    private final UserService userService;
     private final ObjectStorageService storage;
     private final StorageProperties props;
+    private final TransactionTemplate tx;
 
-    public UploadService(ObjectStorageService storage, StorageProperties props) {
+    public UploadService(UploadRepository uploads, UserService userService,
+                         ObjectStorageService storage, StorageProperties props,
+                         TransactionTemplate tx) {
+        this.uploads = uploads;
+        this.userService = userService;
         this.storage = storage;
         this.props = props;
+        this.tx = tx;
     }
 
-    public PresignedUploadResponse presign(UUID userId, PresignUploadRequest req) {
-        UploadKind kind = req.kind();
-        String contentType = req.contentType().trim().toLowerCase();
-
-        String extension = ImageTypes.extensionFor(contentType)
-                .orElseThrow(() -> new BadRequestException("Unsupported image type. Allowed: JPEG, PNG, WebP"));
-        if (req.size() > kind.maxBytes()) {
-            throw new BadRequestException("File is too large (max " + kind.maxBytes() / 1024 + " KB)");
+    /** Steps 1-2: validate the request, record it, hand out a presigned PUT. */
+    public PresignedUploadResponse create(UUID userId, CreateUploadRequest req) {
+        ImageType type = ImageType.fromContentType(req.contentType())
+                .orElseThrow(() -> new BadRequestException(
+                        "Unsupported content type. Allowed: image/jpeg, image/png, image/webp"));
+        if (req.size() > req.kind().maxBytes()) {
+            throw new BadRequestException("File too large. Maximum for "
+                    + req.kind().name().toLowerCase(Locale.ROOT) + " is "
+                    + req.kind().maxBytes() / 1024 + " KB");
         }
 
-        String key = kind.prefix() + "/" + userId + "/" + UUID.randomUUID() + "." + extension;
-        String uploadUrl = storage.presignPut(key, contentType, req.size());
+        Upload upload = uploads.save(new Upload(userId, req.kind(), type, req.size(),
+                Instant.now().plus(FINALIZE_WINDOW)));
 
+        String url = storage.presignPut(upload.tmpKey(), type.contentType(), req.size());
         return new PresignedUploadResponse(
-                key,
-                uploadUrl,
-                "PUT",
-                Map.of("Content-Type", contentType),
-                props.presignExpirySeconds(),
-                kind.maxBytes());
+                upload.getId(), url, "PUT",
+                Map.of("Content-Type", type.contentType()),
+                Instant.now().plusSeconds(props.presignExpirySeconds()));
     }
 
-    /**
-     * Verifies a client-reported key and returns the public URL to store.
-     * Rejects keys the API did not issue to this user, and objects that are missing,
-     * of the wrong type, or over the size limit (those are deleted from the bucket).
-     */
-    public String confirm(UUID userId, UploadKind kind, String key) {
-        String prefix = kind.prefix() + "/" + userId + "/";
-        if (key == null || !key.startsWith(prefix) || !FILE_NAME.matcher(key.substring(prefix.length())).matches()) {
-            throw new BadRequestException("Invalid upload key");
+    /** Steps 4-6: verify, promote, record. Safe to call again after success or a crash. */
+    public UploadResponse complete(UUID userId, UUID uploadId) {
+        Upload upload = uploads.findByIdAndUserId(uploadId, userId)
+                .orElseThrow(() -> new NotFoundException("Upload not found"));
+
+        if (upload.getStatus() == UploadStatus.COMPLETED) {
+            return toResponse(upload);
+        }
+        if (Instant.now().isAfter(upload.getExpiresAt())) {
+            throw new BadRequestException("Upload expired. Request a new upload");
         }
 
-        StoredObject object = storage.head(key)
-                .orElseThrow(() -> new BadRequestException("Upload not found. Upload the file first"));
+        verifyObject(upload);
+        storage.copy(upload.tmpKey(), upload.finalKey(),
+                upload.getImageType().contentType(), IMMUTABLE_CACHE);
 
-        String extension = key.substring(key.lastIndexOf('.') + 1);
-        boolean typeOk = ImageTypes.extensionFor(object.contentType())
-                .filter(extension::equals)
-                .isPresent();
-        boolean sizeOk = object.size() > 0 && object.size() <= kind.maxBytes();
+        String replacedAvatarKey = tx.execute(status -> finish(userId, uploadId));
 
-        if (!typeOk || !sizeOk) {
-            storage.deleteQuietly(key);
-            throw new BadRequestException("Uploaded file is not an allowed image type or is too large");
+        if (replacedAvatarKey != null
+                && !replacedAvatarKey.equals(upload.finalKey())
+                && replacedAvatarKey.startsWith(UploadKind.AVATAR.prefix() + "/")) {
+            storage.deleteQuietly(replacedAvatarKey);
         }
-        return storage.publicUrl(key);
+        return toResponse(upload);
     }
 
-    /** Deletes the object behind one of our public URLs; ignores null and foreign URLs. */
-    public void deleteByUrl(String url) {
-        storage.keyFromPublicUrl(url).ifPresent(storage::deleteQuietly);
+    /** Short DB-only transaction. Returns the avatar key that was replaced, if any. */
+    private String finish(UUID userId, UUID uploadId) {
+        Upload upload = uploads.findForUpdate(uploadId, userId)
+                .orElseThrow(() -> new NotFoundException("Upload not found"));
+        if (upload.getStatus() == UploadStatus.COMPLETED) {
+            return null; // a concurrent call already finished it
+        }
+        upload.markCompleted();
+
+        if (upload.getKind() == UploadKind.AVATAR) {
+            User user = userService.getById(userId);
+            String old = user.getAvatarKey();
+            user.setAvatarKey(upload.finalKey());
+            return old;
+        }
+        return null;
+    }
+
+    private void verifyObject(Upload upload) {
+        String key = upload.tmpKey();
+        HeadObjectResponse head = storage.head(key)
+                .orElseThrow(() -> new ConflictException("File has not been uploaded yet"));
+
+        if (head.contentLength() != upload.getSizeBytes()) {
+            reject(key, "Uploaded file size does not match the declared size");
+        }
+        if (!upload.getImageType().contentType().equalsIgnoreCase(head.contentType())) {
+            reject(key, "Uploaded file content type does not match the declared type");
+        }
+        if (!upload.getImageType().matches(storage.readHead(key, 12))) {
+            reject(key, "File is not a valid " + upload.getImageType().contentType());
+        }
+    }
+
+    private void reject(String tmpKey, String message) {
+        storage.deleteQuietly(tmpKey);
+        throw new BadRequestException(message);
+    }
+
+    private UploadResponse toResponse(Upload upload) {
+        return new UploadResponse(upload.getId(), upload.finalKey(), storage.publicUrl(upload.finalKey()));
     }
 }
