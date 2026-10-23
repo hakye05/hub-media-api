@@ -40,7 +40,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/users/*/followers", "/api/users/*/following").permitAll()
 
                         // Post endpoints (Public reads)
-                        .requestMatchers(HttpMethod.GET, "/api/posts", "/api/posts/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/posts", "/api/posts/*", "/api/users/*/posts").permitAll()
 
                         // Swagger permission
                         .requestMatchers(
