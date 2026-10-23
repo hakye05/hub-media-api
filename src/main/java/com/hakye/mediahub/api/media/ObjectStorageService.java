@@ -70,9 +70,13 @@ public class ObjectStorageService {
                 .cacheControl(cacheControl));
     }
 
+    public void delete(String key) {
+        s3Client.deleteObject(b -> b.bucket(props.bucket()).key(key));
+    }
+
     public void deleteQuietly(String key) {
         try {
-            s3Client.deleteObject(b -> b.bucket(props.bucket()).key(key));
+            delete(key);
         } catch (RuntimeException e) {
             log.warn("Could not delete object {}: {}", key, e.getMessage());
         }
