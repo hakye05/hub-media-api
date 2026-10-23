@@ -130,4 +130,19 @@ public class UploadService {
     private UploadResponse toResponse(Upload upload) {
         return new UploadResponse(upload.getId(), upload.finalKey(), storage.publicUrl(upload.finalKey()));
     }
+
+    /** For attaching an upload to another entity: it must be the caller's, of the expected kind, and finalized. */
+    public Upload getFinalizedUpload(UUID userId, UUID uploadId, UploadKind expectedKind) {
+        Upload upload = uploads.findByIdAndUserId(uploadId, userId)
+                .orElseThrow(() -> new NotFoundException("Upload not found"));
+        if (upload.getKind() != expectedKind) {
+            throw new BadRequestException("Upload was not created for "
+                    + expectedKind.name().toLowerCase(Locale.ROOT) + " images");
+        }
+        if (upload.getStatus() != UploadStatus.COMPLETED) {
+            throw new ConflictException("Upload has not been finalized. Call POST /api/uploads/"
+                    + uploadId + "/complete first");
+        }
+        return upload;
+    }
 }
