@@ -52,7 +52,8 @@ public class PostService {
     @Transactional
     public PostResponse create(UUID userId, CreatePostRequest req) {
         Upload upload = uploadService.getFinalizedUpload(userId, req.uploadId(), UploadKind.POST);
-        Post post = new Post(userId, req.title().trim(), blankToNull(req.description()), upload.getMediaKey());
+        Post post = new Post(userId, req.title().trim(), blankToNull(req.description()),
+                upload.getMediaKey(), upload.getWidth(), upload.getHeight());
         try {
             posts.saveAndFlush(post);
         } catch (DataIntegrityViolationException e) {
@@ -105,7 +106,8 @@ public class PostService {
 
         return new PostDetailResponse(
                 post.getId(), post.getTitle(), post.getDescription(),
-                storage.publicUrl(post.getImageKey()), post.getCreatedAt(), post.getUpdatedAt(),
+                storage.publicUrl(post.getImageKey()), post.getWidth(), post.getHeight(),
+                post.getCreatedAt(), post.getUpdatedAt(),
                 ProfileSummaryResponse.of(author, storage.publicUrl(author.getAvatarKey()),
                         isSelf, isFollowing));
     }
@@ -144,7 +146,8 @@ public class PostService {
 
     private PostResponse toResponse(Post p) {
         return new PostResponse(p.getId(), p.getUserId(), p.getTitle(), p.getDescription(),
-                storage.publicUrl(p.getImageKey()), p.getCreatedAt(), p.getUpdatedAt());
+                storage.publicUrl(p.getImageKey()), p.getWidth(), p.getHeight(),
+                p.getCreatedAt(), p.getUpdatedAt());
     }
 
     private static int clamp(int size) {

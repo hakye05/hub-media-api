@@ -10,6 +10,8 @@ public record PostDetailResponse(
         String title,
         String description,
         String imageUrl,
+        Integer width,
+        Integer height,
         Instant createdAt,
         Instant updatedAt,
         ProfileSummaryResponse author

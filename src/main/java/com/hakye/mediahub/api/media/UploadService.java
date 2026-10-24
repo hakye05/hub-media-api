@@ -16,6 +16,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -24,6 +25,8 @@ public class UploadService {
     /** Must stay far below the 1-day tmp/ lifecycle TTL. */
     private static final Duration FINALIZE_WINDOW = Duration.ofHours(1);
     private static final String IMMUTABLE_CACHE = "public, max-age=31536000, immutable";
+
+    private static final int MAX_SIDE_PX = 16_384;
 
     private final UploadRepository uploads;
     private final UserService userService;
@@ -74,11 +77,11 @@ public class UploadService {
             throw new BadRequestException("Upload expired. Request a new upload");
         }
 
-        verifyObject(upload);
+        ImageSize size = verifyObject(upload);
         storage.copy(upload.tmpKey(), upload.finalKey(),
                 upload.getImageType().contentType(), IMMUTABLE_CACHE);
 
-        String replacedAvatarKey = tx.execute(status -> finish(userId, uploadId));
+        String replacedAvatarKey = tx.execute(status -> finish(userId, uploadId, size));
 
         if (replacedAvatarKey != null
                 && !replacedAvatarKey.equals(upload.finalKey())
@@ -89,13 +92,13 @@ public class UploadService {
     }
 
     /** Short DB-only transaction. Returns the avatar key that was replaced, if any. */
-    private String finish(UUID userId, UUID uploadId) {
+    private String finish(UUID userId, UUID uploadId, ImageSize size) {
         Upload upload = uploads.findForUpdate(uploadId, userId)
                 .orElseThrow(() -> new NotFoundException("Upload not found"));
         if (upload.getStatus() == UploadStatus.COMPLETED) {
             return null; // a concurrent call already finished it
         }
-        upload.markCompleted();
+        upload.markCompleted(size);
 
         if (upload.getKind() == UploadKind.AVATAR) {
             User user = userService.getById(userId);
@@ -106,20 +109,29 @@ public class UploadService {
         return null;
     }
 
-    private void verifyObject(Upload upload) {
+    private ImageSize verifyObject(Upload upload) {
         String key = upload.tmpKey();
+        ImageType type = upload.getImageType();
         HeadObjectResponse head = storage.head(key)
                 .orElseThrow(() -> new ConflictException("File has not been uploaded yet"));
 
         if (head.contentLength() != upload.getSizeBytes()) {
             reject(key, "Uploaded file size does not match the declared size");
         }
-        if (!upload.getImageType().contentType().equalsIgnoreCase(head.contentType())) {
+        if (!type.contentType().equalsIgnoreCase(head.contentType())) {
             reject(key, "Uploaded file content type does not match the declared type");
         }
-        if (!upload.getImageType().matches(storage.readHead(key, 12))) {
-            reject(key, "File is not a valid " + upload.getImageType().contentType());
+
+        byte[] header = storage.readHead(key, ImageHeader.sniffBytes(type));
+        if (!ImageHeader.matches(type, header)) {
+            reject(key, "File is not a valid " + type.contentType());
         }
+
+        Optional<ImageSize> dims = ImageHeader.dimensions(type, header);
+        if (dims.isEmpty() || dims.get().width() > MAX_SIDE_PX || dims.get().height() > MAX_SIDE_PX) {
+            reject(key, "Image dimensions are unreadable or exceed " + MAX_SIDE_PX + " px per side");
+        }
+        return dims.get();
     }
 
     private void reject(String tmpKey, String message) {

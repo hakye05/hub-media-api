@@ -32,6 +32,12 @@ public class Upload {
     @Column(name = "size_bytes", nullable = false, updatable = false)
     private long sizeBytes;
 
+    @Column(updatable = false)
+    private Integer width;
+
+    @Column(updatable = false)
+    private Integer height;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private UploadStatus status = UploadStatus.PENDING;
@@ -59,9 +65,11 @@ public class Upload {
     public String finalKey() { return kind.prefix() + "/" + id + "." + imageType.extension(); }
     public String tmpKey()   { return "tmp/" + finalKey(); }
 
-    public void markCompleted() {
+    public void markCompleted(ImageSize size) {
         this.status = UploadStatus.COMPLETED;
         this.mediaKey = finalKey();
+        this.width = size.width();
+        this.height = size.height();
         this.completedAt = Instant.now();
     }
 }

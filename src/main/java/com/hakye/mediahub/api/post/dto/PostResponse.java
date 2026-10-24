@@ -9,6 +9,8 @@ public record PostResponse(
         String title,
         String description,
         String imageUrl,
+        Integer width,
+        Integer height,
         Instant createdAt,
         Instant updatedAt
 ) {

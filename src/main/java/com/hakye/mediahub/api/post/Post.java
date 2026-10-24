@@ -34,17 +34,25 @@ public class Post {
     @Column(name = "image_key", nullable = false, updatable = false, length = 255)
     private String imageKey;
 
+    @Column(nullable = false, updatable = false)
+    private Integer width;
+
+    @Column(nullable = false, updatable = false)
+    private Integer height;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    public Post(UUID userId, String title, String description, String imageKey) {
+    public Post(UUID userId, String title, String description, String imageKey, Integer width, Integer height) {
         this.userId = userId;
         this.title = title;
         this.description = description;
         this.imageKey = imageKey;
+        this.width = width;
+        this.height = height;
     }
 
     @PrePersist
