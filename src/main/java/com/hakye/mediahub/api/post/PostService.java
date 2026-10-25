@@ -1,7 +1,7 @@
 package com.hakye.mediahub.api.post;
 
-import com.hakye.mediahub.api.collection.SavedPostId;
-import com.hakye.mediahub.api.collection.SavedPostRepository;
+import com.hakye.mediahub.api.collection.domain.SavedPostId;
+import com.hakye.mediahub.api.collection.repository.SavedPostRepository;
 import com.hakye.mediahub.api.common.dto.CursorPage;
 import com.hakye.mediahub.api.common.exceptions.BadRequestException;
 import com.hakye.mediahub.api.common.exceptions.ConflictException;
@@ -153,11 +153,7 @@ public class PostService {
         boolean hasMore = rows.size() > limit;
         List<Post> page = hasMore ? rows.subList(0, limit) : rows;
         String next = hasMore ? PageCursor.encode(page.get(page.size() - 1)) : null;
-
-        Set<UUID> saved = savedIds(viewerId, page);
-        return new CursorPage<>(
-                page.stream().map(p -> toResponse(p, saved.contains(p.getId()))).toList(),
-                next);
+        return new CursorPage<>(toResponses(page, viewerId), next);
     }
 
     /** Guests and empty pages skip the query entirely. */
@@ -171,6 +167,12 @@ public class PostService {
         return new PostResponse(p.getId(), p.getUserId(), p.getTitle(), p.getDescription(),
                 storage.publicUrl(p.getImageKey()), p.getWidth(), p.getHeight(),
                 p.getCreatedAt(), p.getUpdatedAt(), savedByViewer);
+    }
+
+    /** Maps posts to responses, resolving the viewer's saved flags in a single query. */
+    public List<PostResponse> toResponses(List<Post> page, UUID viewerId) {
+        Set<UUID> saved = savedIds(viewerId, page);
+        return page.stream().map(p -> toResponse(p, saved.contains(p.getId()))).toList();
     }
 
     private static int clamp(int size) {

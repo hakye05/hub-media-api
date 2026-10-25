@@ -1,4 +1,4 @@
-package com.hakye.mediahub.api.collection;
+package com.hakye.mediahub.api.collection.domain;
 
 import jakarta.persistence.*;
 import lombok.AccessLevel;

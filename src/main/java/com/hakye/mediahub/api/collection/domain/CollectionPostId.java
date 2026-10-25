@@ -1,4 +1,4 @@
-package com.hakye.mediahub.api.collection;
+package com.hakye.mediahub.api.collection.domain;
 
 import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
@@ -10,7 +10,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @EqualsAndHashCode
-public class SavedPostId implements Serializable {
-    private UUID userId;
+public class CollectionPostId implements Serializable {
+    private UUID collectionId;
     private UUID postId;
 }

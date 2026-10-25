@@ -1,5 +1,7 @@
 package com.hakye.mediahub.api.collection;
 
+import com.hakye.mediahub.api.collection.domain.SavedPost;
+import com.hakye.mediahub.api.collection.repository.SavedPostRepository;
 import com.hakye.mediahub.api.common.dto.CursorPage;
 import com.hakye.mediahub.api.common.exceptions.NotFoundException;
 import com.hakye.mediahub.api.common.utils.PageCursor;

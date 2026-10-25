@@ -1,5 +1,7 @@
-package com.hakye.mediahub.api.collection;
+package com.hakye.mediahub.api.collection.repository;
 
+import com.hakye.mediahub.api.collection.domain.SavedPost;
+import com.hakye.mediahub.api.collection.domain.SavedPostId;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
