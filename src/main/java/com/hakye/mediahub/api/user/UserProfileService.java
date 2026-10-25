@@ -4,7 +4,7 @@ import com.hakye.mediahub.api.common.exceptions.BadRequestException;
 import com.hakye.mediahub.api.common.exceptions.ConflictException;
 import com.hakye.mediahub.api.follow.FollowId;
 import com.hakye.mediahub.api.follow.FollowRepository;
-import com.hakye.mediahub.api.media.ObjectStorageService;
+import com.hakye.mediahub.api.common.storage.ObjectStorageService;
 import com.hakye.mediahub.api.user.dto.*;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;

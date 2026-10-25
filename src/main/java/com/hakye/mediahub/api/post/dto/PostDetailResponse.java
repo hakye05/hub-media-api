@@ -14,6 +14,7 @@ public record PostDetailResponse(
         Integer height,
         Instant createdAt,
         Instant updatedAt,
-        ProfileSummaryResponse author
+        ProfileSummaryResponse author,
+        boolean savedByViewer
 ) {
 }

@@ -42,6 +42,9 @@ public class SecurityConfig {
                         // Post endpoints (Public reads)
                         .requestMatchers(HttpMethod.GET, "/api/posts", "/api/posts/*", "/api/users/*/posts").permitAll()
 
+                        // Collection endpoints
+                        .requestMatchers(HttpMethod.GET, "/api/collections/*", "/api/collections/*/posts", "/api/users/*/collections").permitAll()
+
                         // Swagger permission
                         .requestMatchers(
                                 "/swagger-ui/**",

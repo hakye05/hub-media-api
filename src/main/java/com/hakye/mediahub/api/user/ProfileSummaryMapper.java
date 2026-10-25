@@ -2,7 +2,7 @@ package com.hakye.mediahub.api.user;
 
 import com.hakye.mediahub.api.common.dto.PageResponse;
 import com.hakye.mediahub.api.follow.FollowRepository;
-import com.hakye.mediahub.api.media.ObjectStorageService;
+import com.hakye.mediahub.api.common.storage.ObjectStorageService;
 import com.hakye.mediahub.api.user.dto.ProfileSummaryResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Component;

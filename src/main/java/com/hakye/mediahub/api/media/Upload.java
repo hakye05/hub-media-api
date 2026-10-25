@@ -1,5 +1,7 @@
 package com.hakye.mediahub.api.media;
 
+import com.hakye.mediahub.api.media.image.ImageSize;
+import com.hakye.mediahub.api.media.image.ImageType;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;

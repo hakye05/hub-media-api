@@ -1,4 +1,4 @@
-package com.hakye.mediahub.api.media;
+package com.hakye.mediahub.api.common.storage;
 
 import org.springframework.stereotype.Service;
 
