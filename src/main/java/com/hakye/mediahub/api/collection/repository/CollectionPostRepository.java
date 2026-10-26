@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -43,4 +44,20 @@ public interface CollectionPostRepository extends JpaRepository<CollectionPost, 
             """, nativeQuery = true)
     List<CollectionPost> findPageAfter(@Param("collectionId") UUID collectionId, @Param("at") Instant at,
                                        @Param("id") UUID id, Pageable pageable);
+
+    /** Per collection: [collection_id, post count, image key of the most recently added post]. */
+    @Query(value = """
+        select cp.collection_id,
+               count(*),
+               (select p.image_key
+                  from collection_posts l
+                  join posts p on p.id = l.post_id
+                 where l.collection_id = cp.collection_id
+                 order by l.created_at desc, l.post_id desc
+                 limit 1)
+          from collection_posts cp
+         where cp.collection_id in (:collectionIds)
+         group by cp.collection_id
+        """, nativeQuery = true)
+    List<Object[]> findStats(@Param("collectionIds") Collection<UUID> collectionIds);
 }

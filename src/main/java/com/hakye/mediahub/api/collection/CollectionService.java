@@ -3,10 +3,7 @@ package com.hakye.mediahub.api.collection;
 import com.hakye.mediahub.api.collection.domain.CollectionPost;
 import com.hakye.mediahub.api.collection.domain.PostCollection;
 import com.hakye.mediahub.api.collection.domain.SavedPostId;
-import com.hakye.mediahub.api.collection.dto.CollectionDetailResponse;
-import com.hakye.mediahub.api.collection.dto.CollectionResponse;
-import com.hakye.mediahub.api.collection.dto.CreateCollectionRequest;
-import com.hakye.mediahub.api.collection.dto.UpdateCollectionRequest;
+import com.hakye.mediahub.api.collection.dto.*;
 import com.hakye.mediahub.api.collection.repository.CollectionPostRepository;
 import com.hakye.mediahub.api.collection.repository.PostCollectionRepository;
 import com.hakye.mediahub.api.collection.repository.SavedPostRepository;
@@ -31,10 +28,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.UUID;
+import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -77,7 +71,7 @@ public class CollectionService {
         } catch (DataIntegrityViolationException e) {
             throw new ConflictException(DUPLICATE_TITLE);
         }
-        return toResponse(collection);
+        return toResponse(collection, CollectionStats.EMPTY);
     }
 
     @Transactional
@@ -101,7 +95,9 @@ public class CollectionService {
         } catch (DataIntegrityViolationException e) {
             throw new ConflictException(DUPLICATE_TITLE);
         }
-        return toResponse(collection);
+        CollectionStats stats = statsFor(List.of(collection.getId()))
+                .getOrDefault(collection.getId(), CollectionStats.EMPTY);
+        return toResponse(collection, stats);
     }
 
     /** Posts stay saved; only the collection and its memberships go (FK cascade). */
@@ -152,7 +148,20 @@ public class CollectionService {
             PostCollection last = page.get(page.size() - 1);
             next = PageCursor.encode(last.getCreatedAt(), last.getId());
         }
-        return new CursorPage<>(page.stream().map(this::toResponse).toList(), next);
+        Map<UUID, CollectionStats> stats = statsFor(page.stream().map(PostCollection::getId).toList());
+        return new CursorPage<>(
+                page.stream()
+                        .map(p -> toResponse(p, stats.getOrDefault(p.getId(), CollectionStats.EMPTY)))
+                        .toList(),
+                next);
+    }
+
+    /** The caller's collections that contain this post, most recently added first. */
+    @Transactional(readOnly = true)
+    public List<CollectionSummaryResponse> containingPost(UUID userId, UUID postId) {
+        return collections.findContainingPost(userId, postId).stream()
+                .map(c -> new CollectionSummaryResponse(c.getId(), c.getTitle(), c.isPublic()))
+                .toList();
     }
 
     /** Posts in a collection, most recently added first. */
@@ -220,9 +229,25 @@ public class CollectionService {
         return collection;
     }
 
-    private CollectionResponse toResponse(PostCollection c) {
+    private record CollectionStats(long postCount, String coverImageKey) {
+        static final CollectionStats EMPTY = new CollectionStats(0, null);
+    }
+
+    /** One grouped query for a whole page. Collections without posts are simply absent from the map. */
+    private Map<UUID, CollectionStats> statsFor(List<UUID> collectionIds) {
+        if (collectionIds.isEmpty()) return Map.of();
+        Map<UUID, CollectionStats> stats = new HashMap<>();
+        for (Object[] row : collectionPosts.findStats(collectionIds)) {
+            stats.put((UUID) row[0], new CollectionStats(((Number) row[1]).longValue(), (String) row[2]));
+        }
+        return stats;
+    }
+
+    private CollectionResponse toResponse(PostCollection c, CollectionStats stats) {
         return new CollectionResponse(c.getId(), c.getUserId(), c.getTitle(), c.isPublic(),
                 false, // savedByViewer: reserved for saving other users' collections
+                stats.postCount(),
+                stats.coverImageKey() == null ? null : storage.publicUrl(stats.coverImageKey()),
                 c.getCreatedAt(), c.getUpdatedAt());
     }
 }

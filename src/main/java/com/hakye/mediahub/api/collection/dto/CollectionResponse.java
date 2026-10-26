@@ -14,6 +14,8 @@ public record CollectionResponse(
         boolean isPublic,
 
         boolean savedByViewer,
+        long postCount,
+        String coverImageUrl,
         Instant createdAt,
         Instant updatedAt
 ) {

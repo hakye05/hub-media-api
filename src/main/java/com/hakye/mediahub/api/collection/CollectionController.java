@@ -1,9 +1,6 @@
 package com.hakye.mediahub.api.collection;
 
-import com.hakye.mediahub.api.collection.dto.CollectionDetailResponse;
-import com.hakye.mediahub.api.collection.dto.CollectionResponse;
-import com.hakye.mediahub.api.collection.dto.CreateCollectionRequest;
-import com.hakye.mediahub.api.collection.dto.UpdateCollectionRequest;
+import com.hakye.mediahub.api.collection.dto.*;
 import com.hakye.mediahub.api.common.dto.CursorPage;
 import com.hakye.mediahub.api.common.utils.CurrentUser;
 import com.hakye.mediahub.api.post.dto.PostResponse;
@@ -13,6 +10,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -75,5 +73,11 @@ public class CollectionController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void removePost(@PathVariable UUID id, @PathVariable UUID postId, @AuthenticationPrincipal Jwt jwt) {
         collectionService.removePost(CurrentUser.requireId(jwt), id, postId);
+    }
+
+    @GetMapping("/posts/{postId}/collections")
+    public List<CollectionSummaryResponse> collectionsContainingPost(@PathVariable UUID postId,
+                                                                     @AuthenticationPrincipal Jwt jwt) {
+        return collectionService.containingPost(CurrentUser.requireId(jwt), postId);
     }
 }

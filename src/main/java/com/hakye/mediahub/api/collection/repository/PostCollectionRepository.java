@@ -41,4 +41,12 @@ public interface PostCollectionRepository extends JpaRepository<PostCollection, 
                                        @Param("includePrivate") boolean includePrivate,
                                        @Param("at") Instant at, @Param("id") UUID id,
                                        Pageable pageable);
+
+    @Query(value = """
+        select c.* from collections c
+        join collection_posts cp on cp.collection_id = c.id
+        where cp.user_id = :userId and cp.post_id = :postId
+        order by cp.created_at desc, c.id desc
+        """, nativeQuery = true)
+    List<PostCollection> findContainingPost(@Param("userId") UUID userId, @Param("postId") UUID postId);
 }
