@@ -12,6 +12,7 @@ public record PostResponse(
         Integer width,
         Integer height,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        boolean savedByViewer
 ) {
 }

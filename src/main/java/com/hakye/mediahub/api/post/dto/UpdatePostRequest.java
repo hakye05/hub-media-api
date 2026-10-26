@@ -6,7 +6,7 @@ public record UpdatePostRequest(
         @Size(max = 100, message = "Title must be at most 100 characters")
         String title,
 
-        @Size(max = 500, message = "Description must be at most 2000 characters")
+        @Size(max = 500, message = "Description must be at most 500 characters")
         String description
 ) {
 }

@@ -1,4 +1,4 @@
-package com.hakye.mediahub.api.media;
+package com.hakye.mediahub.api.media.image;
 
 import java.util.Optional;
 
@@ -7,7 +7,7 @@ public final class ImageHeader {
     private ImageHeader() {}
 
     /** Checks the file signature of the first bytes of the object. */
-    static boolean matches(ImageType type, byte[] h) {
+    public static boolean matches(ImageType type, byte[] h) {
         return switch (type) {
             case JPEG -> has(h, 0, 0xFF, 0xD8, 0xFF);
             case PNG  -> has(h, 0, 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A);
@@ -16,12 +16,12 @@ public final class ImageHeader {
     }
 
     /** How many bytes from the start of the object are enough for matches() and dimensions(). */
-    static int sniffBytes(ImageType type) {
+    public static int sniffBytes(ImageType type) {
         return type == ImageType.JPEG ? 1024 * 1024 : 64;
     }
 
     /** Display size from the file header. Empty if the header is malformed or truncated. */
-    static Optional<ImageSize> dimensions(ImageType type, byte[] h) {
+    public static Optional<ImageSize> dimensions(ImageType type, byte[] h) {
         return switch (type) {
             case PNG -> pngSize(h);
             case WEBP -> webpSize(h);

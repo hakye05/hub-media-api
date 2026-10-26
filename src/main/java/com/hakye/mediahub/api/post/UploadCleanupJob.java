@@ -1,6 +1,6 @@
 package com.hakye.mediahub.api.post;
 
-import com.hakye.mediahub.api.media.ObjectStorageService;
+import com.hakye.mediahub.api.common.storage.ObjectStorageService;
 import com.hakye.mediahub.api.media.Upload;
 import com.hakye.mediahub.api.media.UploadKind;
 import com.hakye.mediahub.api.media.UploadStatus;

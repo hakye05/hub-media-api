@@ -39,8 +39,19 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/users/*").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/users/*/followers", "/api/users/*/following").permitAll()
 
+                        // Saved posts: private to the caller, every method needs a token
+                        .requestMatchers("/api/saved-posts", "/api/posts/*/save").authenticated()
+
+                        // "Which of my collections contain this post": caller only
+                        .requestMatchers(HttpMethod.GET, "/api/posts/*/collections").authenticated()
+
                         // Post endpoints (Public reads)
                         .requestMatchers(HttpMethod.GET, "/api/posts", "/api/posts/*", "/api/users/*/posts").permitAll()
+
+                        // Collection endpoints: reads are public (visibility is enforced in
+                        // CollectionService and answers 404); everything else needs a token
+                        .requestMatchers(HttpMethod.GET, "/api/collections/*", "/api/collections/*/posts", "/api/users/*/collections").permitAll()
+                        .requestMatchers("/api/collections/**").authenticated()
 
                         // Swagger permission
                         .requestMatchers(

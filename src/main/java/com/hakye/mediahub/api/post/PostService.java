@@ -1,12 +1,15 @@
 package com.hakye.mediahub.api.post;
 
+import com.hakye.mediahub.api.collection.domain.SavedPostId;
+import com.hakye.mediahub.api.collection.repository.SavedPostRepository;
 import com.hakye.mediahub.api.common.dto.CursorPage;
 import com.hakye.mediahub.api.common.exceptions.BadRequestException;
 import com.hakye.mediahub.api.common.exceptions.ConflictException;
 import com.hakye.mediahub.api.common.exceptions.NotFoundException;
+import com.hakye.mediahub.api.common.utils.PageCursor;
 import com.hakye.mediahub.api.follow.FollowId;
 import com.hakye.mediahub.api.follow.FollowRepository;
-import com.hakye.mediahub.api.media.ObjectStorageService;
+import com.hakye.mediahub.api.common.storage.ObjectStorageService;
 import com.hakye.mediahub.api.media.Upload;
 import com.hakye.mediahub.api.media.UploadKind;
 import com.hakye.mediahub.api.media.UploadService;
@@ -24,7 +27,9 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -38,13 +43,16 @@ public class PostService {
     private final FollowRepository followRepository;
     private final ObjectStorageService storage;
     private final TransactionTemplate tx;
+    private final SavedPostRepository savedPostRepository;
 
     public PostService(PostRepository posts, UploadService uploadService, UserService userService,
-                       FollowRepository followRepository, ObjectStorageService storage, TransactionTemplate tx) {
+                       FollowRepository followRepository, SavedPostRepository savedPostRepository,
+                       ObjectStorageService storage, TransactionTemplate tx) {
         this.posts = posts;
         this.uploadService = uploadService;
         this.userService = userService;
         this.followRepository = followRepository;
+        this.savedPostRepository = savedPostRepository;
         this.storage = storage;
         this.tx = tx;
     }
@@ -59,7 +67,7 @@ public class PostService {
         } catch (DataIntegrityViolationException e) {
             throw new ConflictException("This upload is already attached to a post");
         }
-        return toResponse(post);
+        return toResponse(post, false);
     }
 
     @Transactional
@@ -79,7 +87,8 @@ public class PostService {
         }
         // Flush so @PreUpdate runs and the response carries the new updatedAt.
         posts.saveAndFlush(post);
-        return toResponse(post);
+        boolean saved = savedPostRepository.existsById(new SavedPostId(userId, postId));
+        return toResponse(post, saved);
     }
 
     /** DB row in a short transaction, R2 object after commit. */
@@ -103,51 +112,67 @@ public class PostService {
         boolean isSelf = viewerId != null && viewerId.equals(author.getId());
         boolean isFollowing = viewerId != null && !isSelf
                 && followRepository.existsById(new FollowId(viewerId, author.getId()));
+        boolean savedByViewer = viewerId != null
+                && savedPostRepository.existsById(new SavedPostId(viewerId, postId));
 
         return new PostDetailResponse(
                 post.getId(), post.getTitle(), post.getDescription(),
                 storage.publicUrl(post.getImageKey()), post.getWidth(), post.getHeight(),
                 post.getCreatedAt(), post.getUpdatedAt(),
                 ProfileSummaryResponse.of(author, storage.publicUrl(author.getAvatarKey()),
-                        isSelf, isFollowing));
+                        isSelf, isFollowing),
+                savedByViewer);
     }
 
     /** Global feed, newest first. */
     @Transactional(readOnly = true)
-    public CursorPage<PostResponse> feed(String cursor, int size) {
+    public CursorPage<PostResponse> feed(String cursor, int size, UUID viewerId) {
         int limit = clamp(size);
-        PostCursor c = PostCursor.decode(cursor);
-        Pageable fetch = PageRequest.of(0, limit + 1); // one extra row tells us if there is a next page
+        PageCursor c = PageCursor.decode(cursor);
+        Pageable fetch = PageRequest.of(0, limit + 1);
         List<Post> rows = c == null
                 ? posts.findAllByOrderByCreatedAtDescIdDesc(fetch)
                 : posts.findFeedAfter(c.createdAt(), c.id(), fetch);
-        return toPage(rows, limit);
+        return toPage(rows, limit, viewerId);
     }
 
     /** One user's posts, newest first. */
     @Transactional(readOnly = true)
-    public CursorPage<PostResponse> byUsername(String username, String cursor, int size) {
+    public CursorPage<PostResponse> byUsername(String username, String cursor, int size, UUID viewerId) {
         User user = userService.getByUsernameOrThrow(username);
         int limit = clamp(size);
-        PostCursor c = PostCursor.decode(cursor);
+        PageCursor c = PageCursor.decode(cursor);
         Pageable fetch = PageRequest.of(0, limit + 1);
         List<Post> rows = c == null
                 ? posts.findByUserIdOrderByCreatedAtDescIdDesc(user.getId(), fetch)
                 : posts.findByUserAfter(user.getId(), c.createdAt(), c.id(), fetch);
-        return toPage(rows, limit);
+        return toPage(rows, limit, viewerId);
     }
 
-    private CursorPage<PostResponse> toPage(List<Post> rows, int limit) {
+    private CursorPage<PostResponse> toPage(List<Post> rows, int limit, UUID viewerId) {
         boolean hasMore = rows.size() > limit;
         List<Post> page = hasMore ? rows.subList(0, limit) : rows;
-        String next = hasMore ? PostCursor.encode(page.get(page.size() - 1)) : null;
-        return new CursorPage<>(page.stream().map(this::toResponse).toList(), next);
+        String next = hasMore ? PageCursor.encode(page.get(page.size() - 1)) : null;
+        return new CursorPage<>(toResponses(page, viewerId), next);
     }
 
-    private PostResponse toResponse(Post p) {
+    /** Guests and empty pages skip the query entirely. */
+    private Set<UUID> savedIds(UUID viewerId, List<Post> page) {
+        if (viewerId == null || page.isEmpty()) return Set.of();
+        return new HashSet<>(savedPostRepository.findSavedPostIds(
+                viewerId, page.stream().map(Post::getId).toList()));
+    }
+
+    public PostResponse toResponse(Post p, boolean savedByViewer) {
         return new PostResponse(p.getId(), p.getUserId(), p.getTitle(), p.getDescription(),
                 storage.publicUrl(p.getImageKey()), p.getWidth(), p.getHeight(),
-                p.getCreatedAt(), p.getUpdatedAt());
+                p.getCreatedAt(), p.getUpdatedAt(), savedByViewer);
+    }
+
+    /** Maps posts to responses, resolving the viewer's saved flags in a single query. */
+    public List<PostResponse> toResponses(List<Post> page, UUID viewerId) {
+        Set<UUID> saved = savedIds(viewerId, page);
+        return page.stream().map(p -> toResponse(p, saved.contains(p.getId()))).toList();
     }
 
     private static int clamp(int size) {

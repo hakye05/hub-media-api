@@ -33,8 +33,9 @@ public class PostController {
 
     @GetMapping("/posts")
     public CursorPage<PostResponse> feed(@RequestParam(required = false) String cursor,
-                                         @RequestParam(defaultValue = "20") int size) {
-        return postService.feed(cursor, size);
+                                         @RequestParam(defaultValue = "20") int size,
+                                         @AuthenticationPrincipal Jwt jwt) {
+        return postService.feed(cursor, size, CurrentUser.optionalId(jwt));
     }
 
     @GetMapping("/posts/{id}")
@@ -57,7 +58,8 @@ public class PostController {
     @GetMapping("/users/{username}/posts")
     public CursorPage<PostResponse> userPosts(@PathVariable String username,
                                               @RequestParam(required = false) String cursor,
-                                              @RequestParam(defaultValue = "20") int size) {
-        return postService.byUsername(username, cursor, size);
+                                              @RequestParam(defaultValue = "20") int size,
+                                              @AuthenticationPrincipal Jwt jwt) {
+        return postService.byUsername(username, cursor, size, CurrentUser.optionalId(jwt));
     }
 }
