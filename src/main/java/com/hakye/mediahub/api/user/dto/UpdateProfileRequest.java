@@ -1,6 +1,6 @@
 package com.hakye.mediahub.api.user.dto;
 
-import com.hakye.mediahub.api.user.Gender;
+import com.hakye.mediahub.api.user.domain.Gender;
 import jakarta.validation.constraints.Size;
 
 public record UpdateProfileRequest(

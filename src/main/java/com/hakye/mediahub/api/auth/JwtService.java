@@ -1,7 +1,7 @@
 package com.hakye.mediahub.api.auth;
 
 import com.hakye.mediahub.api.config.JwtProperties;
-import com.hakye.mediahub.api.user.User;
+import com.hakye.mediahub.api.user.domain.User;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
@@ -30,7 +30,7 @@ public class JwtService {
         Duration ttl = Duration.ofMinutes(props.accessTtlMinutes());
 
         JwtClaimsSet claims = JwtClaimsSet.builder()
-                .issuer("hub-hakye")
+                .issuer(props.issuer())
                 .issuedAt(now)
                 .expiresAt(now.plus(ttl))
                 .subject(user.getId().toString())

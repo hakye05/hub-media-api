@@ -32,33 +32,27 @@ public class SecurityConfig {
                         .requestMatchers("/error").permitAll()
                         .requestMatchers("/actuator/health/**").permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
+                        .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
 
                         // User endpoints
                         .requestMatchers(HttpMethod.GET, "/api/users/me").authenticated()
-                        .requestMatchers(HttpMethod.GET, "/api/users/check-username").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/users/*").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/users/*/followers", "/api/users/*/following").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/posts/following").authenticated()
 
-                        // Saved posts: private to the caller, every method needs a token
-                        .requestMatchers("/api/saved-posts", "/api/posts/*/save").authenticated()
+                        // Public reads. Private data (private collections, saved posts) is hidden by the services
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/users/*",
+                                "/api/users/*/followers",
+                                "/api/users/*/following",
+                                "/api/users/*/posts",
+                                "/api/users/*/collections",
 
-                        // "Which of my collections contain this post": caller only
-                        .requestMatchers(HttpMethod.GET, "/api/posts/*/collections").authenticated()
+                                "/api/posts",
+                                "/api/posts/search",
+                                "/api/posts/*",
 
-                        // Post endpoints (Public reads)
-                        .requestMatchers(HttpMethod.GET, "/api/posts", "/api/posts/*", "/api/users/*/posts").permitAll()
+                                "/api/collections/*",
+                                "/api/collections/*/posts").permitAll()
 
-                        // Collection endpoints: reads are public (visibility is enforced in
-                        // CollectionService and answers 404); everything else needs a token
-                        .requestMatchers(HttpMethod.GET, "/api/collections/*", "/api/collections/*/posts", "/api/users/*/collections").permitAll()
-                        .requestMatchers("/api/collections/**").authenticated()
-
-                        // Swagger permission
-                        .requestMatchers(
-                                "/swagger-ui/**",
-                                "/v3/api-docs/**",
-                                "/swagger-ui.html"
-                        ).permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth -> oauth.jwt(Customizer.withDefaults()));
         return http.build();

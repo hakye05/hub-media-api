@@ -2,6 +2,7 @@ package com.hakye.mediahub.api.post;
 
 import com.hakye.mediahub.api.common.dto.CursorPage;
 import com.hakye.mediahub.api.common.utils.CurrentUser;
+import com.hakye.mediahub.api.common.utils.PageCursor;
 import com.hakye.mediahub.api.post.dto.CreatePostRequest;
 import com.hakye.mediahub.api.post.dto.PostDetailResponse;
 import com.hakye.mediahub.api.post.dto.PostResponse;
@@ -15,7 +16,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("api")
+@RequestMapping("/api")
 public class PostController {
 
     private final PostService postService;
@@ -33,7 +34,7 @@ public class PostController {
 
     @GetMapping("/posts")
     public CursorPage<PostResponse> feed(@RequestParam(required = false) String cursor,
-                                         @RequestParam(defaultValue = "20") int size,
+                                         @RequestParam(defaultValue = PageCursor.DEFAULT_SIZE_PARAM) int size,
                                          @AuthenticationPrincipal Jwt jwt) {
         return postService.feed(cursor, size, CurrentUser.optionalId(jwt));
     }
@@ -58,8 +59,23 @@ public class PostController {
     @GetMapping("/users/{username}/posts")
     public CursorPage<PostResponse> userPosts(@PathVariable String username,
                                               @RequestParam(required = false) String cursor,
-                                              @RequestParam(defaultValue = "20") int size,
+                                              @RequestParam(defaultValue = PageCursor.DEFAULT_SIZE_PARAM) int size,
                                               @AuthenticationPrincipal Jwt jwt) {
         return postService.byUsername(username, cursor, size, CurrentUser.optionalId(jwt));
+    }
+
+    @GetMapping("/posts/following")
+    public CursorPage<PostResponse> following(@RequestParam(required = false) String cursor,
+                                              @RequestParam(defaultValue = PageCursor.DEFAULT_SIZE_PARAM) int size,
+                                              @AuthenticationPrincipal Jwt jwt) {
+        return postService.following(CurrentUser.requireId(jwt), cursor, size);
+    }
+
+    @GetMapping("/posts/search")
+    public CursorPage<PostResponse> search(@RequestParam String q,
+                                           @RequestParam(required = false) String cursor,
+                                           @RequestParam(defaultValue = PageCursor.DEFAULT_SIZE_PARAM) int size,
+                                           @AuthenticationPrincipal Jwt jwt) {
+        return postService.search(q, cursor, size, CurrentUser.optionalId(jwt));
     }
 }

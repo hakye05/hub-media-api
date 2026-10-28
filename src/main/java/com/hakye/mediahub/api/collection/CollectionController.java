@@ -3,6 +3,7 @@ package com.hakye.mediahub.api.collection;
 import com.hakye.mediahub.api.collection.dto.*;
 import com.hakye.mediahub.api.common.dto.CursorPage;
 import com.hakye.mediahub.api.common.utils.CurrentUser;
+import com.hakye.mediahub.api.common.utils.PageCursor;
 import com.hakye.mediahub.api.post.dto.PostResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -14,7 +15,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("api")
+@RequestMapping("/api")
 public class CollectionController {
 
     private final CollectionService collectionService;
@@ -50,7 +51,7 @@ public class CollectionController {
     @GetMapping("/users/{username}/collections")
     public CursorPage<CollectionResponse> userCollections(@PathVariable String username,
                                                           @RequestParam(required = false) String cursor,
-                                                          @RequestParam(defaultValue = "20") int size,
+                                                          @RequestParam(defaultValue = PageCursor.DEFAULT_SIZE_PARAM) int size,
                                                           @AuthenticationPrincipal Jwt jwt) {
         return collectionService.byUsername(username, cursor, size, CurrentUser.optionalId(jwt));
     }
@@ -58,7 +59,7 @@ public class CollectionController {
     @GetMapping("/collections/{id}/posts")
     public CursorPage<PostResponse> posts(@PathVariable UUID id,
                                           @RequestParam(required = false) String cursor,
-                                          @RequestParam(defaultValue = "20") int size,
+                                          @RequestParam(defaultValue = PageCursor.DEFAULT_SIZE_PARAM) int size,
                                           @AuthenticationPrincipal Jwt jwt) {
         return collectionService.listPosts(id, cursor, size, CurrentUser.optionalId(jwt));
     }

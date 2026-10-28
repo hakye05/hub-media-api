@@ -11,54 +11,49 @@ import com.hakye.mediahub.api.common.dto.CursorPage;
 import com.hakye.mediahub.api.common.exceptions.BadRequestException;
 import com.hakye.mediahub.api.common.exceptions.ConflictException;
 import com.hakye.mediahub.api.common.exceptions.NotFoundException;
-import com.hakye.mediahub.api.common.storage.ObjectStorageService;
+import com.hakye.mediahub.api.post.PostMapper;
+import com.hakye.mediahub.api.storage.ObjectStorageService;
 import com.hakye.mediahub.api.common.utils.PageCursor;
-import com.hakye.mediahub.api.follow.FollowId;
-import com.hakye.mediahub.api.follow.FollowRepository;
-import com.hakye.mediahub.api.post.Post;
-import com.hakye.mediahub.api.post.PostRepository;
-import com.hakye.mediahub.api.post.PostService;
+import com.hakye.mediahub.api.post.repository.PostRepository;
 import com.hakye.mediahub.api.post.dto.PostResponse;
-import com.hakye.mediahub.api.user.User;
+import com.hakye.mediahub.api.user.ProfileSummaryMapper;
+import com.hakye.mediahub.api.user.domain.User;
 import com.hakye.mediahub.api.user.UserService;
-import com.hakye.mediahub.api.user.dto.ProfileSummaryResponse;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 @Service
 public class CollectionService {
 
-    private static final int MAX_PAGE_SIZE = 20;
     private static final String NOT_FOUND = "Collection not found";
     private static final String DUPLICATE_TITLE = "You already have a collection with this title";
+
+    /** Reserved for saving other users' collections; always false until that feature exists. */
+    private static final boolean SAVED_BY_VIEWER = false;
 
     private final PostCollectionRepository collections;
     private final CollectionPostRepository collectionPosts;
     private final SavedPostRepository savedPosts;
     private final PostRepository posts;
-    private final PostService postService;
+    private final PostMapper postMapper;
     private final UserService userService;
-    private final FollowRepository followRepository;
+    private final ProfileSummaryMapper profileMapper;
     private final ObjectStorageService storage;
 
     public CollectionService(PostCollectionRepository collections, CollectionPostRepository collectionPosts,
-                             SavedPostRepository savedPosts, PostRepository posts, PostService postService,
-                             UserService userService, FollowRepository followRepository,
+                             SavedPostRepository savedPosts, PostRepository posts, PostMapper postMapper,
+                             UserService userService, ProfileSummaryMapper profileMapper,
                              ObjectStorageService storage) {
         this.collections = collections;
         this.collectionPosts = collectionPosts;
         this.savedPosts = savedPosts;
         this.posts = posts;
-        this.postService = postService;
+        this.postMapper = postMapper;
         this.userService = userService;
-        this.followRepository = followRepository;
+        this.profileMapper = profileMapper;
         this.storage = storage;
     }
 
@@ -66,11 +61,7 @@ public class CollectionService {
     public CollectionResponse create(UUID userId, CreateCollectionRequest req) {
         PostCollection collection = new PostCollection(userId, req.title().trim(),
                 Boolean.TRUE.equals(req.isPublic()));
-        try {
-            collections.saveAndFlush(collection);
-        } catch (DataIntegrityViolationException e) {
-            throw new ConflictException(DUPLICATE_TITLE);
-        }
+        flushOrConflict(() -> collections.saveAndFlush(collection));
         return toResponse(collection, CollectionStats.EMPTY);
     }
 
@@ -89,12 +80,8 @@ public class CollectionService {
         if (req.isPublic() != null) {
             collection.setPublic(req.isPublic());
         }
-        try {
-            // Flush so @PreUpdate runs, the unique index is checked, and the response has the new updatedAt.
-            collections.saveAndFlush(collection);
-        } catch (DataIntegrityViolationException e) {
-            throw new ConflictException(DUPLICATE_TITLE);
-        }
+        // Flush so @PreUpdate runs, the unique index is checked, and the response has the new updatedAt.
+        flushOrConflict(() -> collections.saveAndFlush(collection));
         CollectionStats stats = statsFor(List.of(collection.getId()))
                 .getOrDefault(collection.getId(), CollectionStats.EMPTY);
         return toResponse(collection, stats);
@@ -114,46 +101,31 @@ public class CollectionService {
         PostCollection collection = visibleCollection(collectionId, viewerId);
         User author = userService.getById(collection.getUserId());
 
-        boolean isSelf = viewerId != null && viewerId.equals(author.getId());
-        boolean isFollowing = viewerId != null && !isSelf
-                && followRepository.existsById(new FollowId(viewerId, author.getId()));
-
         return new CollectionDetailResponse(
-                collection.getId(), collection.getTitle(), collection.isPublic(),
-                false, // savedByViewer: reserved for saving other users' collections
+                collection.getId(), collection.getTitle(), collection.isPublic(), SAVED_BY_VIEWER,
                 collection.getCreatedAt(), collection.getUpdatedAt(),
-                ProfileSummaryResponse.of(author, storage.publicUrl(author.getAvatarKey()),
-                        isSelf, isFollowing));
+                profileMapper.toSummary(author, viewerId));
     }
 
     /** A user's collections, newest first. Owners see all of theirs; everyone else sees public ones. */
     @Transactional(readOnly = true)
     public CursorPage<CollectionResponse> byUsername(String username, String cursor, int size, UUID viewerId) {
-        User owner = userService.getByUsernameOrThrow(username);
+        User owner = userService.getByUsername(username);
         boolean includePrivate = owner.getId().equals(viewerId);
 
-        int limit = Math.clamp(size, 1, MAX_PAGE_SIZE);
-        PageCursor c = PageCursor.decode(cursor);
-        Pageable fetch = PageRequest.of(0, limit + 1); // one extra row tells us if there is a next page
+        int limit = PageCursor.clampSize(size);
+        PageCursor after = PageCursor.decode(cursor);
+        List<PostCollection> rows =
+                collections.findPage(owner.getId(), includePrivate, after.createdAt(), after.id(), limit + 1);
 
-        List<PostCollection> rows = c == null
-                ? collections.findFirstPage(owner.getId(), includePrivate, fetch)
-                : collections.findPageAfter(owner.getId(), includePrivate, c.createdAt(), c.id(), fetch);
-
-        boolean hasMore = rows.size() > limit;
-        List<PostCollection> page = hasMore ? rows.subList(0, limit) : rows;
-
-        String next = null;
-        if (hasMore) {
-            PostCollection last = page.get(page.size() - 1);
-            next = PageCursor.encode(last.getCreatedAt(), last.getId());
-        }
-        Map<UUID, CollectionStats> stats = statsFor(page.stream().map(PostCollection::getId).toList());
-        return new CursorPage<>(
-                page.stream()
-                        .map(p -> toResponse(p, stats.getOrDefault(p.getId(), CollectionStats.EMPTY)))
-                        .toList(),
-                next);
+        return CursorPage.of(rows, limit,
+                c -> new PageCursor(c.getCreatedAt(), c.getId()),
+                page -> {
+                    Map<UUID, CollectionStats> stats = statsFor(page.stream().map(PostCollection::getId).toList());
+                    return page.stream()
+                            .map(c -> toResponse(c, stats.getOrDefault(c.getId(), CollectionStats.EMPTY)))
+                            .toList();
+                });
     }
 
     /** The caller's collections that contain this post, most recently added first. */
@@ -169,38 +141,20 @@ public class CollectionService {
     public CursorPage<PostResponse> listPosts(UUID collectionId, String cursor, int size, UUID viewerId) {
         visibleCollection(collectionId, viewerId);
 
-        int limit = Math.clamp(size, 1, MAX_PAGE_SIZE);
-        PageCursor c = PageCursor.decode(cursor);
-        Pageable fetch = PageRequest.of(0, limit + 1);
+        int limit = PageCursor.clampSize(size);
+        PageCursor after = PageCursor.decode(cursor);
+        List<CollectionPost> rows = collectionPosts.findPage(collectionId, after.createdAt(), after.id(), limit + 1);
 
-        List<CollectionPost> rows = c == null
-                ? collectionPosts.findFirstPage(collectionId, fetch)
-                : collectionPosts.findPageAfter(collectionId, c.createdAt(), c.id(), fetch);
-
-        boolean hasMore = rows.size() > limit;
-        List<CollectionPost> page = hasMore ? rows.subList(0, limit) : rows;
-
-        // One batched lookup, then restore the "added at" order.
-        Map<UUID, Post> byId = posts.findAllById(page.stream().map(CollectionPost::getPostId).toList())
-                .stream().collect(Collectors.toMap(Post::getId, Function.identity()));
-        List<Post> ordered = page.stream()
-                .map(cp -> byId.get(cp.getPostId()))
-                .filter(Objects::nonNull)
-                .toList();
-
-        String next = null;
-        if (hasMore) {
-            CollectionPost last = page.get(page.size() - 1);
-            next = PageCursor.encode(last.getCreatedAt(), last.getPostId());
-        }
-        return new CursorPage<>(postService.toResponses(ordered, viewerId), next);
+        return CursorPage.of(rows, limit,
+                cp -> new PageCursor(cp.getCreatedAt(), cp.getPostId()),
+                page -> postMapper.toResponses(
+                        posts.findAllInOrder(page.stream().map(CollectionPost::getPostId).toList()), viewerId));
     }
 
     /** Only the owner can add, and only posts they have saved. Idempotent. */
     @Transactional
     public void addPost(UUID userId, UUID collectionId, UUID postId) {
-        collections.findByIdAndUserId(collectionId, userId)
-                .orElseThrow(() -> new NotFoundException(NOT_FOUND));
+        requireOwned(userId, collectionId);
         if (!savedPosts.existsById(new SavedPostId(userId, postId))) {
             throw new ConflictException("Post is not saved. Save it before adding it to a collection");
         }
@@ -215,9 +169,13 @@ public class CollectionService {
     /** Idempotent: removing a post that isn't in the collection is fine. */
     @Transactional
     public void removePost(UUID userId, UUID collectionId, UUID postId) {
+        requireOwned(userId, collectionId);
+        collectionPosts.remove(collectionId, postId);
+    }
+
+    private void requireOwned(UUID userId, UUID collectionId) {
         collections.findByIdAndUserId(collectionId, userId)
                 .orElseThrow(() -> new NotFoundException(NOT_FOUND));
-        collectionPosts.remove(collectionId, postId);
     }
 
     private PostCollection visibleCollection(UUID collectionId, UUID viewerId) {
@@ -227,6 +185,15 @@ public class CollectionService {
             throw new NotFoundException(NOT_FOUND); // don't reveal that a private collection exists
         }
         return collection;
+    }
+
+    /** Runs a write whose unique index (title per user) may reject it, turning that into a 409. */
+    private static void flushOrConflict(Runnable write) {
+        try {
+            write.run();
+        } catch (DataIntegrityViolationException e) {
+            throw new ConflictException(DUPLICATE_TITLE);
+        }
     }
 
     private record CollectionStats(long postCount, String coverImageKey) {
@@ -244,10 +211,8 @@ public class CollectionService {
     }
 
     private CollectionResponse toResponse(PostCollection c, CollectionStats stats) {
-        return new CollectionResponse(c.getId(), c.getUserId(), c.getTitle(), c.isPublic(),
-                false, // savedByViewer: reserved for saving other users' collections
-                stats.postCount(),
-                stats.coverImageKey() == null ? null : storage.publicUrl(stats.coverImageKey()),
+        return new CollectionResponse(c.getId(), c.getUserId(), c.getTitle(), c.isPublic(), SAVED_BY_VIEWER,
+                stats.postCount(), storage.publicUrl(stats.coverImageKey()),
                 c.getCreatedAt(), c.getUpdatedAt());
     }
 }

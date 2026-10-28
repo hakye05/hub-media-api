@@ -4,10 +4,6 @@ server:
 spring:
   application:
     name: api
-  security:
-    user:
-      name: ${SWAGGER_USER}
-      password: ${SWAGGER_PASSWORD}
   datasource:
     url: ${DB_URL}
     username: ${DB_USER}
@@ -15,18 +11,17 @@ spring:
     hikari:
       maximum-pool-size: 5
   jpa:
+    open-in-view: false
     hibernate:
       ddl-auto: validate
-    show-sql: true
 
 app:
   jwt:
     secret: ${JWT_SECRET}
+    issuer: hub-hakye
     access-ttl-minutes: 60
   cors:
     allowed-origin: http://localhost:3000
-  media:
-    allowed-hosts: ""
   storage:
     account-id: ${R2_ACCOUNT_ID}
     bucket: ${R2_BUCKET}

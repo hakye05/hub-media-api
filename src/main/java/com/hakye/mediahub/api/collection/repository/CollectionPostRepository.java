@@ -2,7 +2,6 @@ package com.hakye.mediahub.api.collection.repository;
 
 import com.hakye.mediahub.api.collection.domain.CollectionPost;
 import com.hakye.mediahub.api.collection.domain.CollectionPostId;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -29,21 +28,16 @@ public interface CollectionPostRepository extends JpaRepository<CollectionPost, 
     @Query("delete from CollectionPost cp where cp.collectionId = :collectionId and cp.postId = :postId")
     int remove(@Param("collectionId") UUID collectionId, @Param("postId") UUID postId);
 
-    @Query("""
-            select cp from CollectionPost cp
-            where cp.collectionId = :collectionId
-            order by cp.createdAt desc, cp.postId desc
-            """)
-    List<CollectionPost> findFirstPage(@Param("collectionId") UUID collectionId, Pageable pageable);
-
+    /** Posts in a collection, most recently added first, strictly after the cursor. Pass limit + 1. */
     @Query(value = """
             select * from collection_posts
             where collection_id = :collectionId
               and (created_at, post_id) < (cast(:at as timestamptz), cast(:id as uuid))
             order by created_at desc, post_id desc
+            limit :limit
             """, nativeQuery = true)
-    List<CollectionPost> findPageAfter(@Param("collectionId") UUID collectionId, @Param("at") Instant at,
-                                       @Param("id") UUID id, Pageable pageable);
+    List<CollectionPost> findPage(@Param("collectionId") UUID collectionId, @Param("at") Instant at,
+                                  @Param("id") UUID id, @Param("limit") int limit);
 
     /** Per collection: [collection_id, post count, image key of the most recently added post]. */
     @Query(value = """

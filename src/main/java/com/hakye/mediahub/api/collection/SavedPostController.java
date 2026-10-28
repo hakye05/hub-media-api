@@ -2,6 +2,7 @@ package com.hakye.mediahub.api.collection;
 
 import com.hakye.mediahub.api.common.dto.CursorPage;
 import com.hakye.mediahub.api.common.utils.CurrentUser;
+import com.hakye.mediahub.api.common.utils.PageCursor;
 import com.hakye.mediahub.api.post.dto.PostResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -11,7 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("api")
+@RequestMapping("/api")
 public class SavedPostController {
 
     private final SavedPostService savedPostService;
@@ -35,7 +36,7 @@ public class SavedPostController {
     @GetMapping("/saved-posts")
     public CursorPage<PostResponse> list(@AuthenticationPrincipal Jwt jwt,
                                          @RequestParam(required = false) String cursor,
-                                         @RequestParam(defaultValue = "20") int size) {
+                                         @RequestParam(defaultValue = PageCursor.DEFAULT_SIZE_PARAM) int size) {
         return savedPostService.list(CurrentUser.requireId(jwt), cursor, size);
     }
 }
