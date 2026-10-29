@@ -1,9 +1,6 @@
 package com.hakye.mediahub.api.auth;
 
-import com.hakye.mediahub.api.auth.dto.AuthResponse;
-import com.hakye.mediahub.api.auth.dto.AuthUserResponse;
-import com.hakye.mediahub.api.auth.dto.LoginRequest;
-import com.hakye.mediahub.api.auth.dto.RegisterRequest;
+import com.hakye.mediahub.api.auth.dto.*;
 import com.hakye.mediahub.api.common.exceptions.ConflictException;
 import com.hakye.mediahub.api.common.exceptions.UnauthorizedException;
 import com.hakye.mediahub.api.user.domain.User;
@@ -21,15 +18,18 @@ public class AuthService {
     private final UserService userService;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final RefreshTokenService refreshTokenService;
 
-    public AuthService(UserRepository userRepository, UserService userService, PasswordEncoder passwordEncoder, JwtService jwtService) {
+    public AuthService(UserRepository userRepository, UserService userService, PasswordEncoder passwordEncoder,
+                       JwtService jwtService, RefreshTokenService refreshTokenService) {
         this.userRepository = userRepository;
         this.userService = userService;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
+        this.refreshTokenService = refreshTokenService;
     }
 
-    public AuthResponse register(RegisterRequest req) {
+    public AuthResult register(RegisterRequest req) {
         String email = UserValidator.normalizeString(req.email());
         String username = UserValidator.normalizeString(req.username());
 
@@ -53,14 +53,32 @@ public class AuthService {
             // Two people grabbed the same email/username at the same moment.
             throw new ConflictException("Email or username is already taken");
         }
-        return toResponse(user);
+        return startSession(user);
     }
 
-    public AuthResponse login(LoginRequest req) {
+    public AuthResult login(LoginRequest req) {
         User user = userRepository.findByEmail(UserValidator.normalizeString(req.email()))
                 .filter(u -> passwordEncoder.matches(req.password(), u.getPasswordHash()))
                 .orElseThrow(() -> new UnauthorizedException("Invalid email or password"));
-        return toResponse(user);
+        return startSession(user);
+    }
+
+    public void logout(String rawRefreshToken) {
+        if (rawRefreshToken != null) {
+            refreshTokenService.revoke(rawRefreshToken);
+        }
+    }
+
+    public AuthResult refresh(String rawRefreshToken) {
+        if (rawRefreshToken == null) {
+            throw new UnauthorizedException("Missing refresh token");
+        }
+        RefreshTokenService.Rotated rotated = refreshTokenService.rotate(rawRefreshToken);
+        return new AuthResult(toResponse(rotated.user()), rotated.token());
+    }
+
+    private AuthResult startSession(User user) {
+        return new AuthResult(toResponse(user), refreshTokenService.issue(user));
     }
 
     private AuthResponse toResponse(User user) {
