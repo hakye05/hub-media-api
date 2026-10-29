@@ -43,6 +43,17 @@ public class UserController {
         return profileService.changeEmail(CurrentUser.requireId(jwt), request);
     }
 
+    @PatchMapping("/me/avatar")
+    public UserResponse changeAvatar(@AuthenticationPrincipal Jwt jwt,
+                                     @Valid @RequestBody ChangeAvatarRequest request) {
+        return profileService.changeAvatar(CurrentUser.requireId(jwt), request.uploadId());
+    }
+
+    @DeleteMapping("/me/avatar")
+    public UserResponse removeAvatar(@AuthenticationPrincipal Jwt jwt) {
+        return profileService.removeAvatar(CurrentUser.requireId(jwt));
+    }
+
     @GetMapping("/{username}")
     public PublicProfileResponse profile(@PathVariable String username, @AuthenticationPrincipal Jwt jwt) {
         return profileService.getPublicProfile(username, CurrentUser.optionalId(jwt));

@@ -5,6 +5,9 @@ import com.hakye.mediahub.api.common.exceptions.BadRequestException;
 import com.hakye.mediahub.api.common.exceptions.ConflictException;
 import com.hakye.mediahub.api.follow.FollowService;
 import com.hakye.mediahub.api.storage.ObjectStorageService;
+import com.hakye.mediahub.api.upload.UploadService;
+import com.hakye.mediahub.api.upload.domain.Upload;
+import com.hakye.mediahub.api.upload.domain.UploadKind;
 import com.hakye.mediahub.api.user.domain.User;
 import com.hakye.mediahub.api.user.domain.UserValidator;
 import com.hakye.mediahub.api.user.dto.*;
@@ -27,16 +30,18 @@ public class UserProfileService {
     private final ProfileSummaryMapper summaryMapper;
     private final PasswordEncoder passwordEncoder;
     private final ObjectStorageService storage;
+    private final UploadService uploadService;
 
     public UserProfileService(UserRepository userRepository, UserService userService,
                               FollowService followService, ProfileSummaryMapper summaryMapper,
-                              PasswordEncoder passwordEncoder, ObjectStorageService storage) {
+                              PasswordEncoder passwordEncoder, ObjectStorageService storage, UploadService uploadService) {
         this.userRepository = userRepository;
         this.userService = userService;
         this.followService = followService;
         this.summaryMapper = summaryMapper;
         this.passwordEncoder = passwordEncoder;
         this.storage = storage;
+        this.uploadService = uploadService;
     }
 
     // ---- Personal profile
@@ -100,6 +105,25 @@ public class UserProfileService {
         user.setEmail(email);
         flushOrConflict("Email is already registered");
         return toResponse(user);
+    }
+
+    public UserResponse changeAvatar(UUID userId, UUID uploadId) {
+        Upload upload = uploadService.getFinalizedUpload(userId, uploadId, UploadKind.AVATAR);
+        String newKey = upload.getMediaKey();
+
+        String oldKey = userService.replaceAvatarKey(userId, newKey);
+        if (oldKey != null && !oldKey.equals(newKey)) {
+            storage.deleteQuietly(oldKey);
+        }
+        return toResponse(userService.getCurrent(userId));
+    }
+
+    public UserResponse removeAvatar(UUID userId) {
+        String oldKey = userService.replaceAvatarKey(userId, null);
+        if (oldKey != null) {
+            storage.deleteQuietly(oldKey);
+        }
+        return toResponse(userService.getCurrent(userId));
     }
 
     // ---- Public profile
