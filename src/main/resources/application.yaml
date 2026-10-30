@@ -26,6 +26,11 @@ app:
     secure: ${REFRESH_COOKIE_SECURE:false}
     same-site: ${REFRESH_COOKIE_SAME_SITE:Lax}
     path: /api/auth
+  rate-limit:
+    login:
+      window: 15m
+      max-attempts-per-account: 5
+      max-attempts-per-ip: 30
   cors:
     allowed-origin: http://localhost:3000
   storage:

@@ -1,15 +1,20 @@
 package com.hakye.mediahub.api.auth;
 
 import com.hakye.mediahub.api.auth.dto.*;
+import com.hakye.mediahub.api.common.exceptions.BadRequestException;
 import com.hakye.mediahub.api.common.exceptions.ConflictException;
 import com.hakye.mediahub.api.common.exceptions.UnauthorizedException;
 import com.hakye.mediahub.api.user.domain.User;
+import com.hakye.mediahub.api.user.dto.ChangePasswordRequest;
 import com.hakye.mediahub.api.user.repository.UserRepository;
 import com.hakye.mediahub.api.user.UserService;
 import com.hakye.mediahub.api.user.domain.UserValidator;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.UUID;
 
 @Service
 public class AuthService {
@@ -67,6 +72,30 @@ public class AuthService {
         if (rawRefreshToken != null) {
             refreshTokenService.revoke(rawRefreshToken);
         }
+    }
+
+    /**
+     * Verifies the current password and sets the new one. Optionally ends every existing
+     * session and starts a fresh one for the caller. One transaction: all or nothing.
+     */
+    @Transactional
+    public AuthResult changePassword(UUID userId, ChangePasswordRequest req) {
+        User user = userService.getCurrent(userId);
+
+        if (!passwordEncoder.matches(req.currentPassword(), user.getPasswordHash())) {
+            throw new BadRequestException("Current password is incorrect");
+        }
+        if (req.currentPassword().equals(req.newPassword())) {
+            throw new BadRequestException("New password must be different from the current one");
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(req.newPassword()));
+
+        if (req.shouldLogoutOtherDevices()) {
+            refreshTokenService.revokeAllForUser(userId);
+            return startSession(user);
+        }
+        return new AuthResult(toResponse(user), null);   // new access token only, cookie untouched
     }
 
     public AuthResult refresh(String rawRefreshToken) {

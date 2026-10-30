@@ -82,6 +82,11 @@ public class RefreshTokenService {
     }
 
     @Transactional
+    public void revokeAllForUser(UUID userId) {
+        repository.revokeAllForUser(userId, Instant.now());
+    }
+
+    @Transactional
     public int purgeExpired() {
         return repository.deleteExpiredBefore(Instant.now().minus(Duration.ofDays(1)));
     }
