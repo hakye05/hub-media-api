@@ -83,12 +83,12 @@ public class UploadService {
         storage.copy(upload.tmpKey(), upload.finalKey(),
                 upload.getImageType().contentType(), IMMUTABLE_CACHE);
 
-        String replacedAvatarKey = tx.execute(status -> finish(userId, uploadId, size));
+        String replacedKey = tx.execute(status -> finish(userId, uploadId, size));
 
-        if (replacedAvatarKey != null
-                && !replacedAvatarKey.equals(upload.finalKey())
-                && replacedAvatarKey.startsWith(UploadKind.AVATAR.prefix() + "/")) {
-            storage.deleteQuietly(replacedAvatarKey);
+        if (replacedKey != null
+                && !replacedKey.equals(upload.finalKey())
+                && replacedKey.startsWith(upload.getKind().prefix() + "/")) {
+            storage.deleteQuietly(replacedKey);
         }
         return toResponse(upload);
     }
@@ -102,10 +102,11 @@ public class UploadService {
         }
         upload.markCompleted(size);
 
-        if (upload.getKind() == UploadKind.AVATAR) {
-            return userService.replaceAvatarKey(userId, upload.finalKey());
-        }
-        return null;
+        return switch (upload.getKind()) {
+            case AVATAR -> userService.replaceAvatarKey(userId, upload.finalKey());
+            case BANNER -> userService.replaceBannerKey(userId, upload.finalKey());
+            case POST -> null;
+        };
     }
 
     private ImageSize verifyObject(Upload upload) {

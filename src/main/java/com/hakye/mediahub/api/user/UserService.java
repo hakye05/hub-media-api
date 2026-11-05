@@ -62,4 +62,13 @@ public class UserService {
         user.setAvatarKey(newKey);
         return old;
     }
+
+    /** Points the user at a new banner object and returns the key it replaced (null if none). */
+    @Transactional
+    public String replaceBannerKey(UUID userId, String newKey) {
+        User user = getCurrent(userId);
+        String old = user.getBannerKey();
+        user.setBannerKey(newKey);
+        return old;
+    }
 }

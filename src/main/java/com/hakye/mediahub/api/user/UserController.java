@@ -75,6 +75,17 @@ public class UserController {
         return profileService.removeAvatar(CurrentUser.requireId(jwt));
     }
 
+    @PatchMapping("/me/banner")
+    public UserResponse changeBanner(@AuthenticationPrincipal Jwt jwt,
+                                     @Valid @RequestBody ChangeBannerRequest request) {
+        return profileService.changeBanner(CurrentUser.requireId(jwt), request.uploadId());
+    }
+
+    @DeleteMapping("/me/banner")
+    public UserResponse removeBanner(@AuthenticationPrincipal Jwt jwt) {
+        return profileService.removeBanner(CurrentUser.requireId(jwt));
+    }
+
     @GetMapping("/{username}")
     public PublicProfileResponse profile(@PathVariable String username, @AuthenticationPrincipal Jwt jwt) {
         return profileService.getPublicProfile(username, CurrentUser.optionalId(jwt));

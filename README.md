@@ -40,7 +40,7 @@ The project focuses on production-minded backend concerns: secure token handling
 
 **Profiles & social graph**
 - Partial profile updates, plus separate guarded routes for username, email and password
-- Profile picture update through upload pipeline
+- Profile picture and banner update through upload pipeline
 - Public profiles with follower/following counts
 - Idempotent follow / unfollow with self-follow checks
 - Paged follower and following lists
@@ -113,7 +113,7 @@ cors:
 
 ### 2. Database
 
-Flyway applies `V1` → `V7` on boot. Hibernate only validates the schema, so a mismatch aborts startup instead of altering tables.
+Flyway applies `V1` → `V8` on boot. Hibernate only validates the schema, so a mismatch aborts startup instead of altering tables.
 
 ### 3. R2 bucket
 
@@ -167,6 +167,8 @@ Deletions cascade in the database, so removing a user sweeps their posts, saves,
 | `PATCH` | `/me/password` | Bearer | `{ currentPassword, newPassword, logoutOtherDevices? }` → `AuthResponse` |
 | `PATCH` | `/me/avatar` | Bearer | `{ uploadId }` of a completed avatar upload |
 | `DELETE` | `/me/avatar` | Bearer | Unlink and delete the object |
+| `PATCH` | `/me/banner` | Bearer | `{ uploadId }` of a completed banner upload |
+| `DELETE` | `/me/banner` | Bearer | Unlink and delete the object |
 | `GET` | `/{username}` | optional | Public profile with counts |
 | `POST` | `/{username}/follow` | Bearer | `204`, idempotent |
 | `DELETE` | `/{username}/follow` | Bearer | `204`, idempotent |

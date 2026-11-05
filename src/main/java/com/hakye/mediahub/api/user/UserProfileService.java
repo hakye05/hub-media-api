@@ -126,6 +126,25 @@ public class UserProfileService {
         return toResponse(userService.getCurrent(userId));
     }
 
+    public UserResponse changeBanner(UUID userId, UUID uploadId) {
+        Upload upload = uploadService.getFinalizedUpload(userId, uploadId, UploadKind.BANNER);
+        String newKey = upload.getMediaKey();
+
+        String oldKey = userService.replaceBannerKey(userId, newKey);
+        if (oldKey != null && !oldKey.equals(newKey)) {
+            storage.deleteQuietly(oldKey);
+        }
+        return toResponse(userService.getCurrent(userId));
+    }
+
+    public UserResponse removeBanner(UUID userId) {
+        String oldKey = userService.replaceBannerKey(userId, null);
+        if (oldKey != null) {
+            storage.deleteQuietly(oldKey);
+        }
+        return toResponse(userService.getCurrent(userId));
+    }
+
     // ---- Public profile
 
     @Transactional(readOnly = true)
@@ -135,7 +154,7 @@ public class UserProfileService {
 
         return new PublicProfileResponse(
                 user.getId(), user.getUsername(), user.getDisplayName(), user.getBio(),
-                summary.avatarUrl(), user.getCreatedAt(),
+                summary.avatarUrl(), storage.publicUrl(user.getBannerKey()), user.getCreatedAt(),
                 followService.countFollowers(user.getId()),
                 followService.countFollowing(user.getId()),
                 summary.isSelf(), summary.isFollowing());
@@ -181,6 +200,8 @@ public class UserProfileService {
     }
 
     private UserResponse toResponse(User user) {
-        return UserResponse.from(user, storage.publicUrl(user.getAvatarKey()));
+        return UserResponse.from(user,
+                storage.publicUrl(user.getAvatarKey()),
+                storage.publicUrl(user.getBannerKey()));
     }
 }

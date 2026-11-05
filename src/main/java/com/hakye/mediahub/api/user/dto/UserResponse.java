@@ -15,10 +15,11 @@ public record UserResponse(
         Gender gender,
         String bio,
         String avatarUrl,
+        String bannerUrl,
         Instant createdAt,
         Instant updatedAt
 ) {
-    public static UserResponse from(User user, String avatarUrl) {
+    public static UserResponse from(User user, String avatarUrl, String bannerUrl) {
         return new UserResponse(
                 user.getId(),
                 user.getEmail(),
@@ -28,6 +29,7 @@ public record UserResponse(
                 user.getGender(),
                 user.getBio(),
                 avatarUrl,
+                bannerUrl,
                 user.getCreatedAt(),
                 user.getUpdatedAt());
     }

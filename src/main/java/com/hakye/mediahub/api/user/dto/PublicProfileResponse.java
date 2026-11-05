@@ -9,6 +9,7 @@ public record PublicProfileResponse(
         String displayName,
         String bio,
         String avatarUrl,
+        String bannerUrl,
         Instant createdAt,
         long followerCount,
         long followingCount,

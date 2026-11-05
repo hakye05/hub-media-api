@@ -46,6 +46,9 @@ public class User {
     @Column(name = "avatar_key", length = 255)
     private String avatarKey;
 
+    @Column(name = "banner_key", length = 255)
+    private String bannerKey;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     @Setter(AccessLevel.NONE)
     private Instant createdAt;
