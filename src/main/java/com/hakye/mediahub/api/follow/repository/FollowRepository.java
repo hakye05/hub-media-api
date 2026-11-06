@@ -2,6 +2,7 @@ package com.hakye.mediahub.api.follow.repository;
 
 import com.hakye.mediahub.api.follow.domain.Follow;
 import com.hakye.mediahub.api.follow.domain.FollowId;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -58,4 +59,28 @@ public interface FollowRepository extends JpaRepository<Follow, FollowId> {
     /** Which of :ids does :viewerId follow? One query for a whole page. */
     @Query("select f.id.followeeId from Follow f where f.id.followerId = :viewerId and f.id.followeeId in :ids")
     List<UUID> findFollowedAmong(@Param("viewerId") UUID viewerId, @Param("ids") Collection<UUID> ids);
+
+    /** Followers of :userId whose name or username matches :pattern, newest follow first. */
+    @Query("""
+            select f from Follow f, User u
+            where f.id.followeeId = :userId
+              and u.id = f.id.followerId
+              and (lower(u.username) like :pattern escape '!' or lower(u.displayName) like :pattern escape '!')
+              and (f.createdAt < :at or (f.createdAt = :at and f.id.followerId < :id))
+            order by f.createdAt desc, f.id.followerId desc
+            """)
+    List<Follow> searchFollowerEdges(@Param("userId") UUID userId, @Param("pattern") String pattern,
+                                     @Param("at") Instant at, @Param("id") UUID id, Pageable page);
+
+    /** Users :userId follows whose name or username matches :pattern, newest follow first. */
+    @Query("""
+            select f from Follow f, User u
+            where f.id.followerId = :userId
+              and u.id = f.id.followeeId
+              and (lower(u.username) like :pattern escape '!' or lower(u.displayName) like :pattern escape '!')
+              and (f.createdAt < :at or (f.createdAt = :at and f.id.followeeId < :id))
+            order by f.createdAt desc, f.id.followeeId desc
+            """)
+    List<Follow> searchFollowingEdges(@Param("userId") UUID userId, @Param("pattern") String pattern,
+                                      @Param("at") Instant at, @Param("id") UUID id, Pageable page);
 }

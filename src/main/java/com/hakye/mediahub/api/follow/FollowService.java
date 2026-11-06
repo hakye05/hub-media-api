@@ -1,15 +1,15 @@
 package com.hakye.mediahub.api.follow;
 
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 
 import com.hakye.mediahub.api.common.dto.CursorPage;
 import com.hakye.mediahub.api.common.exceptions.BadRequestException;
 import com.hakye.mediahub.api.common.utils.PageCursor;
+import com.hakye.mediahub.api.common.utils.SearchQuery;
+import com.hakye.mediahub.api.follow.domain.Follow;
 import com.hakye.mediahub.api.follow.domain.FollowId;
 import com.hakye.mediahub.api.follow.repository.FollowRepository;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -60,25 +60,35 @@ public class FollowService {
         return new HashSet<>(followRepository.findFollowedAmong(viewerId, userIds));
     }
 
-    /** Ids of the users who follow {@code userId}, newest follow first. */
+    /** Ids of the users who follow {@code userId}, newest follow first. A blank query means no filter. */
     @Transactional(readOnly = true)
-    public CursorPage<UUID> followerIds(UUID userId, String cursor, int size) {
+    public CursorPage<UUID> followerIds(UUID userId, String query, String cursor, int size) {
         int limit = PageCursor.clampSize(size);
         PageCursor after = PageCursor.decode(cursor);
-        return CursorPage.of(
-                followRepository.findFollowerEdges(userId, after.createdAt(), after.id(), limit + 1), limit,
+        List<Follow> edges = (query == null || query.isBlank())
+                ? followRepository.findFollowerEdges(userId, after.createdAt(), after.id(), limit + 1)
+                : followRepository.searchFollowerEdges(userId, pattern(query),
+                after.createdAt(), after.id(), PageRequest.ofSize(limit + 1));
+        return CursorPage.of(edges, limit,
                 f -> new PageCursor(f.getCreatedAt(), f.getId().followerId()),
                 page -> page.stream().map(f -> f.getId().followerId()).toList());
     }
 
-    /** Ids of the users {@code userId} follows, newest follow first. */
+    /** Ids of the users {@code userId} follows, newest follow first. A blank query means no filter. */
     @Transactional(readOnly = true)
-    public CursorPage<UUID> followingIds(UUID userId, String cursor, int size) {
+    public CursorPage<UUID> followingIds(UUID userId, String query, String cursor, int size) {
         int limit = PageCursor.clampSize(size);
         PageCursor after = PageCursor.decode(cursor);
-        return CursorPage.of(
-                followRepository.findFollowingEdges(userId, after.createdAt(), after.id(), limit + 1), limit,
+        List<Follow> edges = (query == null || query.isBlank())
+                ? followRepository.findFollowingEdges(userId, after.createdAt(), after.id(), limit + 1)
+                : followRepository.searchFollowingEdges(userId, pattern(query),
+                after.createdAt(), after.id(), PageRequest.ofSize(limit + 1));
+        return CursorPage.of(edges, limit,
                 f -> new PageCursor(f.getCreatedAt(), f.getId().followeeId()),
                 page -> page.stream().map(f -> f.getId().followeeId()).toList());
+    }
+
+    private static String pattern(String query) {
+        return SearchQuery.containsPattern(SearchQuery.require(query));
     }
 }

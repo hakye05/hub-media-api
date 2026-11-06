@@ -105,17 +105,27 @@ public class UserController {
 
     @GetMapping("/{username}/followers")
     public CursorPage<ProfileSummaryResponse> followers(@PathVariable String username,
+                                                        @RequestParam(required = false) String q,
                                                         @RequestParam(required = false) String cursor,
                                                         @RequestParam(defaultValue = PageCursor.DEFAULT_SIZE_PARAM) int size,
                                                         @AuthenticationPrincipal Jwt jwt) {
-        return profileService.followers(username, CurrentUser.optionalId(jwt), cursor, size);
+        return profileService.followers(username, CurrentUser.optionalId(jwt), q, cursor, size);
     }
 
     @GetMapping("/{username}/following")
     public CursorPage<ProfileSummaryResponse> following(@PathVariable String username,
+                                                        @RequestParam(required = false) String q,
                                                         @RequestParam(required = false) String cursor,
                                                         @RequestParam(defaultValue = PageCursor.DEFAULT_SIZE_PARAM) int size,
                                                         @AuthenticationPrincipal Jwt jwt) {
-        return profileService.following(username, CurrentUser.optionalId(jwt), cursor, size);
+        return profileService.following(username, CurrentUser.optionalId(jwt), q, cursor, size);
+    }
+
+    @GetMapping("/search")
+    public CursorPage<ProfileSummaryResponse> search(@RequestParam String q,
+                                                     @RequestParam(required = false) String cursor,
+                                                     @RequestParam(defaultValue = PageCursor.DEFAULT_SIZE_PARAM) int size,
+                                                     @AuthenticationPrincipal Jwt jwt) {
+        return profileService.search(q, CurrentUser.optionalId(jwt), cursor, size);
     }
 }

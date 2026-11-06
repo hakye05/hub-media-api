@@ -3,6 +3,8 @@ package com.hakye.mediahub.api.user;
 import com.hakye.mediahub.api.common.dto.CursorPage;
 import com.hakye.mediahub.api.common.exceptions.BadRequestException;
 import com.hakye.mediahub.api.common.exceptions.ConflictException;
+import com.hakye.mediahub.api.common.utils.PageCursor;
+import com.hakye.mediahub.api.common.utils.SearchQuery;
 import com.hakye.mediahub.api.follow.FollowService;
 import com.hakye.mediahub.api.storage.ObjectStorageService;
 import com.hakye.mediahub.api.upload.UploadService;
@@ -13,6 +15,7 @@ import com.hakye.mediahub.api.user.domain.UserValidator;
 import com.hakye.mediahub.api.user.dto.*;
 import com.hakye.mediahub.api.user.repository.UserRepository;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -171,17 +174,32 @@ public class UserProfileService {
     }
 
     @Transactional(readOnly = true)
-    public CursorPage<ProfileSummaryResponse> followers(String username, UUID viewerId, String cursor, int size) {
+    public CursorPage<ProfileSummaryResponse> followers(String username, UUID viewerId, String query,
+                                                        String cursor, int size) {
         User target = userService.getByUsername(username);
-        return followService.followerIds(target.getId(), cursor, size)
+        return followService.followerIds(target.getId(), query, cursor, size)
                 .mapItems(ids -> summaries(ids, viewerId));
     }
 
     @Transactional(readOnly = true)
-    public CursorPage<ProfileSummaryResponse> following(String username, UUID viewerId, String cursor, int size) {
+    public CursorPage<ProfileSummaryResponse> following(String username, UUID viewerId, String query,
+                                                        String cursor, int size) {
         User target = userService.getByUsername(username);
-        return followService.followingIds(target.getId(), cursor, size)
+        return followService.followingIds(target.getId(), query, cursor, size)
                 .mapItems(ids -> summaries(ids, viewerId));
+    }
+
+    /** People search by name or username, newest accounts first. */
+    @Transactional(readOnly = true)
+    public CursorPage<ProfileSummaryResponse> search(String query, UUID viewerId, String cursor, int size) {
+        String pattern = SearchQuery.containsPattern(SearchQuery.require(query));
+        int limit = PageCursor.clampSize(size);
+        PageCursor after = PageCursor.decode(cursor);
+        return CursorPage.of(
+                userRepository.search(pattern, after.createdAt(), after.id(), PageRequest.ofSize(limit + 1)),
+                limit,
+                u -> new PageCursor(u.getCreatedAt(), u.getId()),
+                rows -> summaryMapper.toSummaries(rows, viewerId));
     }
 
     private List<ProfileSummaryResponse> summaries(List<UUID> ids, UUID viewerId) {
