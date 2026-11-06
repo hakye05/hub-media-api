@@ -48,6 +48,14 @@ public class CollectionController {
         collectionService.delete(CurrentUser.requireId(jwt), id);
     }
 
+    @GetMapping("/collections/search")
+    public CursorPage<CollectionSearchResponse> search(@RequestParam String q,
+                                                       @RequestParam(required = false) String cursor,
+                                                       @RequestParam(defaultValue = PageCursor.DEFAULT_SIZE_PARAM) int size,
+                                                       @AuthenticationPrincipal Jwt jwt) {
+        return collectionService.search(q, cursor, size, CurrentUser.optionalId(jwt));
+    }
+
     @GetMapping("/users/{username}/collections")
     public CursorPage<CollectionResponse> userCollections(@PathVariable String username,
                                                           @RequestParam(required = false) String cursor,

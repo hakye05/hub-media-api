@@ -11,6 +11,7 @@ import com.hakye.mediahub.api.common.dto.CursorPage;
 import com.hakye.mediahub.api.common.exceptions.BadRequestException;
 import com.hakye.mediahub.api.common.exceptions.ConflictException;
 import com.hakye.mediahub.api.common.exceptions.NotFoundException;
+import com.hakye.mediahub.api.common.utils.SearchQuery;
 import com.hakye.mediahub.api.post.PostMapper;
 import com.hakye.mediahub.api.storage.ObjectStorageService;
 import com.hakye.mediahub.api.common.utils.PageCursor;
@@ -19,6 +20,7 @@ import com.hakye.mediahub.api.post.dto.PostResponse;
 import com.hakye.mediahub.api.user.ProfileSummaryMapper;
 import com.hakye.mediahub.api.user.domain.User;
 import com.hakye.mediahub.api.user.UserService;
+import com.hakye.mediahub.api.user.dto.ProfileSummaryResponse;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +35,7 @@ public class CollectionService {
 
     /** Reserved for saving other users' collections; always false until that feature exists. */
     private static final boolean SAVED_BY_VIEWER = false;
+    private static final UUID NO_VIEWER = new UUID(0L, 0L);
 
     private final PostCollectionRepository collections;
     private final CollectionPostRepository collectionPosts;
@@ -124,6 +127,32 @@ public class CollectionService {
                     Map<UUID, CollectionStats> stats = statsFor(page.stream().map(PostCollection::getId).toList());
                     return page.stream()
                             .map(c -> toResponse(c, stats.getOrDefault(c.getId(), CollectionStats.EMPTY)))
+                            .toList();
+                });
+    }
+
+    /** Collections matching the title, newest first. Public ones, plus the viewer's own private ones. */
+    @Transactional(readOnly = true)
+    public CursorPage<CollectionSearchResponse> search(String query, String cursor, int size, UUID viewerId) {
+        String pattern = SearchQuery.containsPattern(SearchQuery.require(query));
+        int limit = PageCursor.clampSize(size);
+        PageCursor after = PageCursor.decode(cursor);
+        List<PostCollection> rows = collections.searchPage(
+                pattern, viewerId != null ? viewerId : NO_VIEWER, after.createdAt(), after.id(), limit + 1);
+
+        return CursorPage.of(rows, limit,
+                c -> new PageCursor(c.getCreatedAt(), c.getId()),
+                page -> {
+                    Map<UUID, CollectionStats> stats = statsFor(page.stream().map(PostCollection::getId).toList());
+                    Map<UUID, ProfileSummaryResponse> owners = new HashMap<>();
+                    return page.stream()
+                            .map(c -> {
+                                ProfileSummaryResponse owner = owners.computeIfAbsent(c.getUserId(),
+                                        id -> profileMapper.toSummary(userService.getById(id), viewerId));
+                                CollectionResponse base =
+                                        toResponse(c, stats.getOrDefault(c.getId(), CollectionStats.EMPTY));
+                                return CollectionSearchResponse.of(base, owner);
+                            })
                             .toList();
                 });
     }

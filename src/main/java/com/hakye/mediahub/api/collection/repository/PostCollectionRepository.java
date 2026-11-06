@@ -41,4 +41,16 @@ public interface PostCollectionRepository extends JpaRepository<PostCollection, 
         order by cp.created_at desc, c.id desc
         """, nativeQuery = true)
     List<PostCollection> findContainingPost(@Param("userId") UUID userId, @Param("postId") UUID postId);
+
+    @Query(value = """
+        select * from collections
+        where lower(title) like :pattern escape '!'
+          and (is_public or user_id = :viewerId)
+          and (created_at, id) < (cast(:at as timestamptz), cast(:id as uuid))
+        order by created_at desc, id desc
+        limit :limit
+        """, nativeQuery = true)
+    List<PostCollection> searchPage(@Param("pattern") String pattern, @Param("viewerId") UUID viewerId,
+                                    @Param("at") Instant at, @Param("id") UUID id,
+                                    @Param("limit") int limit);
 }
