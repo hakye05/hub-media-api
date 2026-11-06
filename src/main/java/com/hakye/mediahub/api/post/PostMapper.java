@@ -9,6 +9,7 @@ import com.hakye.mediahub.api.user.dto.ProfileSummaryResponse;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -39,5 +40,14 @@ public class PostMapper {
         return new PostDetailResponse(p.getId(), p.getTitle(), p.getDescription(),
                 storage.publicUrl(p.getImageKey()), p.getWidth(), p.getHeight(),
                 p.getCreatedAt(), p.getUpdatedAt(), author, savedByViewer);
+    }
+
+    public List<PostDetailResponse> toDetails(List<Post> posts,
+                                              Map<UUID, ProfileSummaryResponse> authors,
+                                              UUID viewerId) {
+        Set<UUID> saved = savedPosts.savedAmong(viewerId, posts.stream().map(Post::getId).toList());
+        return posts.stream()
+                .map(p -> toDetail(p, authors.get(p.getUserId()), saved.contains(p.getId())))
+                .toList();
     }
 }

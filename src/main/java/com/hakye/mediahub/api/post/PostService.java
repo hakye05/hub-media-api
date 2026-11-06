@@ -19,13 +19,17 @@ import com.hakye.mediahub.api.post.dto.UpdatePostRequest;
 import com.hakye.mediahub.api.user.ProfileSummaryMapper;
 import com.hakye.mediahub.api.user.domain.User;
 import com.hakye.mediahub.api.user.UserService;
+import com.hakye.mediahub.api.user.dto.ProfileSummaryResponse;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 public class PostService {
@@ -124,12 +128,13 @@ public class PostService {
         return page(posts.findByUser(user.getId(), after.createdAt(), after.id(), limit + 1), limit, viewerId);
     }
 
-    /** Posts from users the viewer follows, newest first. Signed-in users only. */
+    /** Posts from users the viewer follows, newest first, each with its author. Signed-in users only. */
     @Transactional(readOnly = true)
-    public CursorPage<PostResponse> following(UUID viewerId, String cursor, int size) {
+    public CursorPage<PostDetailResponse> following(UUID viewerId, String cursor, int size) {
         int limit = PageCursor.clampSize(size);
         PageCursor after = PageCursor.decode(cursor);
-        return page(posts.findFollowingFeed(viewerId, after.createdAt(), after.id(), limit + 1), limit, viewerId);
+        return detailPage(posts.findFollowingFeed(viewerId, after.createdAt(), after.id(), limit + 1),
+                limit, viewerId);
     }
 
     /** Case-insensitive substring match on title or description, newest first. */
@@ -145,6 +150,18 @@ public class PostService {
         int limit = PageCursor.clampSize(size);
         PageCursor after = PageCursor.decode(cursor);
         return page(posts.search(likePattern(q), after.createdAt(), after.id(), limit + 1), limit, viewerId);
+    }
+
+    private CursorPage<PostDetailResponse> detailPage(List<Post> fetched, int limit, UUID viewerId) {
+        return CursorPage.of(fetched, limit,
+                p -> new PageCursor(p.getCreatedAt(), p.getId()),
+                rows -> mapper.toDetails(rows, authorsOf(rows, viewerId), viewerId));
+    }
+
+    private Map<UUID, ProfileSummaryResponse> authorsOf(List<Post> rows, UUID viewerId) {
+        List<UUID> ids = rows.stream().map(Post::getUserId).distinct().toList();
+        return profileMapper.toSummaries(userService.getAllInOrder(ids), viewerId).stream()
+                .collect(Collectors.toMap(ProfileSummaryResponse::id, Function.identity()));
     }
 
     private CursorPage<PostResponse> page(List<Post> fetched, int limit, UUID viewerId) {

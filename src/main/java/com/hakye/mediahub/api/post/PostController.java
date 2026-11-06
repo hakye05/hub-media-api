@@ -65,9 +65,9 @@ public class PostController {
     }
 
     @GetMapping("/posts/following")
-    public CursorPage<PostResponse> following(@RequestParam(required = false) String cursor,
-                                              @RequestParam(defaultValue = PageCursor.DEFAULT_SIZE_PARAM) int size,
-                                              @AuthenticationPrincipal Jwt jwt) {
+    public CursorPage<PostDetailResponse> following(@RequestParam(required = false) String cursor,
+                                                    @RequestParam(defaultValue = PageCursor.DEFAULT_SIZE_PARAM) int size,
+                                                    @AuthenticationPrincipal Jwt jwt) {
         return postService.following(CurrentUser.requireId(jwt), cursor, size);
     }
 
