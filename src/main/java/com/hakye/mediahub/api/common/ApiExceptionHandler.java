@@ -1,11 +1,14 @@
 package com.hakye.mediahub.api.common;
 
+import com.hakye.mediahub.api.auth.ratelimit.TooManyRequestsException;
 import com.hakye.mediahub.api.common.exceptions.BadRequestException;
 import com.hakye.mediahub.api.common.exceptions.ConflictException;
 import com.hakye.mediahub.api.common.exceptions.NotFoundException;
 import com.hakye.mediahub.api.common.exceptions.UnauthorizedException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -50,5 +53,13 @@ public class ApiExceptionHandler {
     @ExceptionHandler(UnauthorizedException.class)
     public ProblemDetail handleUnauthorized(UnauthorizedException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
+    }
+
+    @ExceptionHandler(TooManyRequestsException.class)
+    public ResponseEntity<ProblemDetail> handleTooManyRequests(TooManyRequestsException ex) {
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage());
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, String.valueOf(ex.getRetryAfterSeconds()))
+                .body(pd);
     }
 }

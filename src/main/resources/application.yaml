@@ -1,5 +1,7 @@
 server:
-  port: 8080
+  port: ${PORT:8080}
+  forward-headers-strategy: native
+  shutdown: graceful
 
 spring:
   application:
@@ -14,6 +16,16 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: validate
+  data:
+    redis:
+      url: ${REDIS_URL:redis://localhost:6379}
+      timeout: 2s
+
+springdoc:
+  api-docs:
+    enabled: ${SWAGGER_ENABLED:false}
+  swagger-ui:
+    enabled: ${SWAGGER_ENABLED:false}
 
 app:
   jwt:
@@ -32,7 +44,7 @@ app:
       max-attempts-per-account: 5
       max-attempts-per-ip: 30
   cors:
-    allowed-origin: http://localhost:3000
+    allowed-origin: ${CORS_ALLOWED_ORIGIN:http://localhost:3000}
   storage:
     account-id: ${R2_ACCOUNT_ID}
     bucket: ${R2_BUCKET}
@@ -48,4 +60,7 @@ management:
         include: health
   endpoint:
     health:
-      show-details: always
+      show-details: never
+  health:
+    redis:
+      enabled: false

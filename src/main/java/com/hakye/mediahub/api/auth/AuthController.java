@@ -36,8 +36,9 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public AuthResponse login(@Valid @RequestBody LoginRequest request, HttpServletResponse response) {
-        return withCookie(authService.login(request), response);
+    public AuthResponse login(@Valid @RequestBody LoginRequest request,
+                              HttpServletRequest httpRequest, HttpServletResponse response) {
+        return withCookie(authService.login(request, httpRequest.getRemoteAddr()), response);
     }
 
     @PostMapping("/refresh")

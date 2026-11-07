@@ -1,6 +1,7 @@
 package com.hakye.mediahub.api.auth;
 
 import com.hakye.mediahub.api.auth.dto.*;
+import com.hakye.mediahub.api.auth.ratelimit.LoginRateLimiter;
 import com.hakye.mediahub.api.common.exceptions.BadRequestException;
 import com.hakye.mediahub.api.common.exceptions.ConflictException;
 import com.hakye.mediahub.api.common.exceptions.UnauthorizedException;
@@ -24,14 +25,16 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
+    private final LoginRateLimiter loginRateLimiter;
 
     public AuthService(UserRepository userRepository, UserService userService, PasswordEncoder passwordEncoder,
-                       JwtService jwtService, RefreshTokenService refreshTokenService) {
+                       JwtService jwtService, RefreshTokenService refreshTokenService, LoginRateLimiter loginRateLimiter) {
         this.userRepository = userRepository;
         this.userService = userService;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.refreshTokenService = refreshTokenService;
+        this.loginRateLimiter = loginRateLimiter;
     }
 
     public AuthResult register(RegisterRequest req) {
@@ -61,10 +64,19 @@ public class AuthService {
         return startSession(user);
     }
 
-    public AuthResult login(LoginRequest req) {
-        User user = userRepository.findByEmail(UserValidator.normalizeString(req.email()))
+    public AuthResult login(LoginRequest req, String clientIp) {
+        String email = UserValidator.normalizeString(req.email());
+        loginRateLimiter.checkAllowed(email, clientIp);
+
+        User user = userRepository.findByEmail(email)
                 .filter(u -> passwordEncoder.matches(req.password(), u.getPasswordHash()))
-                .orElseThrow(() -> new UnauthorizedException("Invalid email or password"));
+                .orElse(null);
+
+        if (user == null) {
+            loginRateLimiter.recordFailure(email, clientIp);
+            throw new UnauthorizedException("Invalid email or password");
+        }
+        loginRateLimiter.recordSuccess(email);
         return startSession(user);
     }
 
