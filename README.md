@@ -90,7 +90,7 @@ datasource:
 jwt:
   secret: ${JWT_SECRET}
   issuer: hub-hakye
-  access-ttl-minutes: 60
+  access-ttl-minutes: 15
   refresh-ttl-days: 7
   
 refresh-cookie:
@@ -169,6 +169,7 @@ Deletions cascade in the database, so removing a user sweeps their posts, saves,
 | `DELETE` | `/me/avatar` | Bearer | Unlink and delete the object |
 | `PATCH` | `/me/banner` | Bearer | `{ uploadId }` of a completed banner upload |
 | `DELETE` | `/me/banner` | Bearer | Unlink and delete the object |
+| `GET` | `/search?q=` | optional | Search users by username/display name |
 | `GET` | `/{username}` | optional | Public profile with counts |
 | `POST` | `/{username}/follow` | Bearer | `204`, idempotent |
 | `DELETE` | `/{username}/follow` | Bearer | `204`, idempotent |
@@ -198,6 +199,7 @@ Deletions cascade in the database, so removing a user sweeps their posts, saves,
 | Method | Path | Auth | Description |
 | :---: | --- | :---: | --- |
 | `POST` | `/` | Bearer | `{ title, isPublic? }` — private unless `true` → `201` |
+| `GET` | `/search?q=` | optional | Search public collections by title |
 | `GET` | `/{id}` | optional | Detail + author |
 | `PATCH` | `/{id}` | Bearer | Title and/or visibility |
 | `DELETE` | `/{id}` | Bearer | `204`; posts stay saved |
@@ -212,7 +214,7 @@ Deletions cascade in the database, so removing a user sweeps their posts, saves,
 | `POST` | `/` | Bearer | `{ kind, contentType, size }` → presigned URL, `201` |
 | `POST` | `/{id}/complete` | Bearer | Verify and finalize → `200 { uploadId, key, url }` |
 
-`kind` is either `AVATAR` (400 KB) or `POST` (10 MB); accepted types are `image/jpeg`, `image/png`, `image/webp`. An upload must be completed before it can be attached, otherwise throws `409 Upload has not been finalized`.
+`kind` is either `AVATAR` (400 KB), `BANNER` (10 MB) and `POST` (10 MB); accepted types are `image/jpeg`, `image/png`, `image/webp`. An upload must be completed before it can be attached, otherwise throws `409 Upload has not been finalized`.
 
 ## Conventions
 
