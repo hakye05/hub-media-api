@@ -17,10 +17,7 @@ import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 
 @Service
 public class UploadService {
@@ -156,5 +153,10 @@ public class UploadService {
                     + uploadId + "/complete first");
         }
         return upload;
+    }
+
+    /** For account deletion: every finalized object this user owns in storage. */
+    public List<String> mediaKeysOf(UUID userId) {
+        return uploads.findMediaKeysByUserId(userId);
     }
 }

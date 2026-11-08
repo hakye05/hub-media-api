@@ -161,6 +161,7 @@ Deletions cascade in the database, so removing a user sweeps their posts, saves,
 | Method | Path | Auth | Description |
 | :---: | --- | :---: | --- |
 | `GET` | `/me` | Bearer | Own account |
+| `DELETE` | `/me` | Bearer | `{ currentPassword }` to delete account |
 | `PATCH` | `/me` | Bearer | `displayName`, `gender`, `bio` |
 | `PATCH` | `/me/username` | Bearer | `{ username }` |
 | `PATCH` | `/me/email` | Bearer | `{ newEmail, currentPassword }` |

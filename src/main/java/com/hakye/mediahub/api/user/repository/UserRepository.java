@@ -3,6 +3,7 @@ package com.hakye.mediahub.api.user.repository;
 import com.hakye.mediahub.api.user.domain.User;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -36,4 +37,8 @@ public interface UserRepository extends JpaRepository<User, UUID> {
             """)
     List<User> search(@Param("pattern") String pattern, @Param("at") Instant at,
                       @Param("id") UUID id, Pageable page);
+
+    @Modifying
+    @Query("DELETE FROM User u WHERE u.id = :id")
+    void deleteAccount(@Param("id") UUID id);
 }

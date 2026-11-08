@@ -36,4 +36,9 @@ public interface UploadRepository extends JpaRepository<Upload, UUID> {
     @Modifying
     @Query("delete from Upload u where u.status = com.hakye.mediahub.api.upload.domain.UploadStatus.PENDING and u.expiresAt < :before")
     int deleteExpiredPending(@Param("before") Instant before);
+
+    /** Final object keys of everything a user uploaded (avatar, banner, post images). */
+    @Query(value = "select media_key from uploads where user_id = :userId and media_key is not null",
+            nativeQuery = true)
+    List<String> findMediaKeysByUserId(@Param("userId") UUID userId);
 }
