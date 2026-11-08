@@ -53,6 +53,7 @@ The project focuses on production-minded backend concerns: secure token handling
 
 **Saving & collections**
 - Save / unsave any post; saved posts are visible only to their owner
+- Save / unsave other users' public collections; the list is visible only to its owner
 - Named collections, private by default with unique title per author
 - Collection lists include post count and a cover image
 - Collections support "Which of my collections contain this post?" lookup
@@ -71,8 +72,7 @@ The project focuses on production-minded backend concerns: secure token handling
 **Cross-cutting**
 - Keyset (cursor) pagination on every list — no `OFFSET`, each list has a matching composite index
 - RFC 7807 `application/problem+json` errors with per-field validation messages
-- Public reads accept an optional token, so `savedByViewer` and `isFollowing` are accurate for signed-in viewers and simply `false` for guests
-
+- Public reads accept an optional token, so `savedByViewer` (posts and collections) and `isFollowing` are accurate for signed-in viewers and simply `false` for guests
 ## Setup
 
 JDK 21 · Maven 3.9+ · PostgreSQL 14+ with permission to create the `pg_trgm` extension · an R2 bucket.
@@ -113,7 +113,7 @@ cors:
 
 ### 2. Database
 
-Flyway applies `V1` → `V8` on boot. Hibernate only validates the schema, so a mismatch aborts startup instead of altering tables.
+Flyway applies `V1` → `V9` on boot. Hibernate only validates the schema, so a mismatch aborts startup instead of altering tables.
 
 ### 3. R2 bucket
 
@@ -139,10 +139,10 @@ Flyway applies `V1` → `V8` on boot. Hibernate only validates the schema, so a 
 | `saved_posts` | `(user_id, post_id)` |
 | `collections` | Owner and title, unique `lower(title)` per user, `is_public` |
 | `collection_posts` | Membership, with composite foreign keys that require the collection and the saved post to share an owner |
+| `saved_collections` | `(user_id, collection_id)`: public collections of other users that a user bookmarked |
 | `refresh_tokens` | Hashed token, `family_id` lineage, expiry and revocation timestamps |
 
-Deletions cascade in the database, so removing a user sweeps their posts, saves, collections, uploads and sessions.
-
+Deletions cascade in the database, so removing a user sweeps their posts, saves, collections, saved collections, uploads and sessions.
 ## API reference
 
 ### Auth — `/api/auth`
@@ -206,6 +206,9 @@ Deletions cascade in the database, so removing a user sweeps their posts, saves,
 | `GET` | `/{id}/posts` | optional | Posts, most recently added first |
 | `PUT` | `/{id}/posts/{postId}` | Bearer | `204`, idempotent |
 | `DELETE` | `/{id}/posts/{postId}` | Bearer | `204`, idempotent |
+| `PUT` | `/{id}/save` | Bearer | `204`, idempotent; `404` for private collections of others, `400` for your own |
+| `DELETE` | `/{id}/save` | Bearer | `204`, idempotent |
+| `GET` | `/saved-collections` | Bearer | Saved collections with their owners, most recent first |
 
 ### Uploads — `/api/uploads`
 
@@ -229,8 +232,7 @@ Every list is keyset-paginated, newest first.
 - `cursor` is opaque base64 of `"<createdAt>|<id>"` — omit it for the first page, a malformed one is `400 Invalid cursor`.
 - `size` defaults to **20**, clamped to 1..50.
 - `nextCursor` is `null` when exhausted.
-- Followers, saved posts and collection members page over the edge's own timestamp, so order means "most recently added".
-
+- Followers, saved posts, saved collections and collection members page over the edge's own timestamp, so order means "most recently added".
 ### Errors
 
 RFC 7807 `application/problem+json`, mapped centrally by `ApiExceptionHandler`
@@ -254,7 +256,7 @@ com.hakye.mediahub.api
 ├── user/           Account, public profiles, summary mapper
 ├── follow/         Follow functionality
 ├── post/           Feed, authoring, search
-├── collection/     Saved posts and collections
+├── collection/     Saved posts, collections and saved collections
 ├── upload/         Presign lifecycle, image header parsing, cleanup job
 ├── storage/        ObjectStorageService and the S3/R2 beans
 ├── config/         SecurityConfig, JwtConfig, @ConfigurationProperties

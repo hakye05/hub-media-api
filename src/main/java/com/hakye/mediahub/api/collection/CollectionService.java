@@ -2,10 +2,12 @@ package com.hakye.mediahub.api.collection;
 
 import com.hakye.mediahub.api.collection.domain.CollectionPost;
 import com.hakye.mediahub.api.collection.domain.PostCollection;
+import com.hakye.mediahub.api.collection.domain.SavedCollectionId;
 import com.hakye.mediahub.api.collection.domain.SavedPostId;
 import com.hakye.mediahub.api.collection.dto.*;
 import com.hakye.mediahub.api.collection.repository.CollectionPostRepository;
 import com.hakye.mediahub.api.collection.repository.PostCollectionRepository;
+import com.hakye.mediahub.api.collection.repository.SavedCollectionRepository;
 import com.hakye.mediahub.api.collection.repository.SavedPostRepository;
 import com.hakye.mediahub.api.common.dto.CursorPage;
 import com.hakye.mediahub.api.common.exceptions.BadRequestException;
@@ -33,13 +35,12 @@ public class CollectionService {
     private static final String NOT_FOUND = "Collection not found";
     private static final String DUPLICATE_TITLE = "You already have a collection with this title";
 
-    /** Reserved for saving other users' collections; always false until that feature exists. */
-    private static final boolean SAVED_BY_VIEWER = false;
     private static final UUID NO_VIEWER = new UUID(0L, 0L);
 
     private final PostCollectionRepository collections;
     private final CollectionPostRepository collectionPosts;
     private final SavedPostRepository savedPosts;
+    private final SavedCollectionRepository savedCollections;
     private final PostRepository posts;
     private final PostMapper postMapper;
     private final UserService userService;
@@ -47,12 +48,13 @@ public class CollectionService {
     private final ObjectStorageService storage;
 
     public CollectionService(PostCollectionRepository collections, CollectionPostRepository collectionPosts,
-                             SavedPostRepository savedPosts, PostRepository posts, PostMapper postMapper,
+                             SavedPostRepository savedPosts, SavedCollectionRepository savedCollections, PostRepository posts, PostMapper postMapper,
                              UserService userService, ProfileSummaryMapper profileMapper,
                              ObjectStorageService storage) {
         this.collections = collections;
         this.collectionPosts = collectionPosts;
         this.savedPosts = savedPosts;
+        this.savedCollections = savedCollections;
         this.posts = posts;
         this.postMapper = postMapper;
         this.userService = userService;
@@ -65,7 +67,7 @@ public class CollectionService {
         PostCollection collection = new PostCollection(userId, req.title().trim(),
                 Boolean.TRUE.equals(req.isPublic()));
         flushOrConflict(() -> collections.saveAndFlush(collection));
-        return toResponse(collection, CollectionStats.EMPTY);
+        return toResponse(collection, CollectionStats.EMPTY, false);
     }
 
     @Transactional
@@ -87,7 +89,7 @@ public class CollectionService {
         flushOrConflict(() -> collections.saveAndFlush(collection));
         CollectionStats stats = statsFor(List.of(collection.getId()))
                 .getOrDefault(collection.getId(), CollectionStats.EMPTY);
-        return toResponse(collection, stats);
+        return toResponse(collection, stats, false);
     }
 
     /** Posts stay saved; only the collection and its memberships go (FK cascade). */
@@ -104,8 +106,10 @@ public class CollectionService {
         PostCollection collection = visibleCollection(collectionId, viewerId);
         User author = userService.getById(collection.getUserId());
 
+        boolean saved = viewerId != null
+                && savedCollections.existsById(new SavedCollectionId(viewerId, collectionId));
         return new CollectionDetailResponse(
-                collection.getId(), collection.getTitle(), collection.isPublic(), SAVED_BY_VIEWER,
+                collection.getId(), collection.getTitle(), collection.isPublic(), saved,
                 collection.getCreatedAt(), collection.getUpdatedAt(),
                 profileMapper.toSummary(author, viewerId));
     }
@@ -124,9 +128,11 @@ public class CollectionService {
         return CursorPage.of(rows, limit,
                 c -> new PageCursor(c.getCreatedAt(), c.getId()),
                 page -> {
-                    Map<UUID, CollectionStats> stats = statsFor(page.stream().map(PostCollection::getId).toList());
+                    List<UUID> ids = page.stream().map(PostCollection::getId).toList();
+                    Map<UUID, CollectionStats> stats = statsFor(ids);
+                    Set<UUID> saved = savedAmong(viewerId, ids);
                     return page.stream()
-                            .map(c -> toResponse(c, stats.getOrDefault(c.getId(), CollectionStats.EMPTY)))
+                            .map(c -> toResponse(c, stats.getOrDefault(c.getId(), CollectionStats.EMPTY), saved.contains(c.getId())))
                             .toList();
                 });
     }
@@ -142,19 +148,7 @@ public class CollectionService {
 
         return CursorPage.of(rows, limit,
                 c -> new PageCursor(c.getCreatedAt(), c.getId()),
-                page -> {
-                    Map<UUID, CollectionStats> stats = statsFor(page.stream().map(PostCollection::getId).toList());
-                    Map<UUID, ProfileSummaryResponse> owners = new HashMap<>();
-                    return page.stream()
-                            .map(c -> {
-                                ProfileSummaryResponse owner = owners.computeIfAbsent(c.getUserId(),
-                                        id -> profileMapper.toSummary(userService.getById(id), viewerId));
-                                CollectionResponse base =
-                                        toResponse(c, stats.getOrDefault(c.getId(), CollectionStats.EMPTY));
-                                return CollectionSearchResponse.of(base, owner);
-                            })
-                            .toList();
-                });
+                page -> withOwners(page, viewerId));
     }
 
     /** The caller's collections that contain this post, most recently added first. */
@@ -239,8 +233,30 @@ public class CollectionService {
         return stats;
     }
 
-    private CollectionResponse toResponse(PostCollection c, CollectionStats stats) {
-        return new CollectionResponse(c.getId(), c.getUserId(), c.getTitle(), c.isPublic(), SAVED_BY_VIEWER,
+    /** Collections with owner summaries and the viewer's saved flag. Shared by search and saved lists. */
+    List<CollectionSearchResponse> withOwners(List<PostCollection> page, UUID viewerId) {
+        List<UUID> ids = page.stream().map(PostCollection::getId).toList();
+        Map<UUID, CollectionStats> stats = statsFor(ids);
+        Set<UUID> saved = savedAmong(viewerId, ids);
+        Map<UUID, ProfileSummaryResponse> owners = new HashMap<>();
+        return page.stream()
+                .map(c -> {
+                    ProfileSummaryResponse owner = owners.computeIfAbsent(c.getUserId(),
+                            id -> profileMapper.toSummary(userService.getById(id), viewerId));
+                    CollectionResponse base = toResponse(c,
+                            stats.getOrDefault(c.getId(), CollectionStats.EMPTY), saved.contains(c.getId()));
+                    return CollectionSearchResponse.of(base, owner);
+                })
+                .toList();
+    }
+
+    private Set<UUID> savedAmong(UUID viewerId, List<UUID> ids) {
+        if (viewerId == null || ids.isEmpty()) return Set.of();
+        return new HashSet<>(savedCollections.findSavedCollectionIds(viewerId, ids));
+    }
+
+    private CollectionResponse toResponse(PostCollection c, CollectionStats stats, boolean savedByViewer) {
+        return new CollectionResponse(c.getId(), c.getUserId(), c.getTitle(), c.isPublic(), savedByViewer,
                 stats.postCount(), storage.publicUrl(stats.coverImageKey()),
                 c.getCreatedAt(), c.getUpdatedAt());
     }
