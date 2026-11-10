@@ -72,10 +72,11 @@ public class PostController {
     }
 
     @GetMapping("/posts/search")
-    public CursorPage<PostResponse> search(@RequestParam String q,
+    public CursorPage<PostResponse> search(@RequestParam(required = false) String q,
+                                           @RequestParam(required = false) String color,
                                            @RequestParam(required = false) String cursor,
                                            @RequestParam(defaultValue = PageCursor.DEFAULT_SIZE_PARAM) int size,
                                            @AuthenticationPrincipal Jwt jwt) {
-        return postService.search(q, cursor, size, CurrentUser.optionalId(jwt));
+        return postService.search(q, color, cursor, size, CurrentUser.optionalId(jwt));
     }
 }

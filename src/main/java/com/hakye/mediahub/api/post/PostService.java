@@ -5,7 +5,12 @@ import com.hakye.mediahub.api.common.exceptions.BadRequestException;
 import com.hakye.mediahub.api.common.exceptions.ConflictException;
 import com.hakye.mediahub.api.common.exceptions.NotFoundException;
 import com.hakye.mediahub.api.common.utils.PageCursor;
+import com.hakye.mediahub.api.post.color.ColorCursor;
+import com.hakye.mediahub.api.post.color.ColorLab;
 import com.hakye.mediahub.api.post.domain.Post;
+import com.hakye.mediahub.api.post.domain.PostColor;
+import com.hakye.mediahub.api.post.repository.ColorMatch;
+import com.hakye.mediahub.api.post.repository.PostColorRepository;
 import com.hakye.mediahub.api.post.repository.PostRepository;
 import com.hakye.mediahub.api.post.repository.SavedPostLookup;
 import com.hakye.mediahub.api.storage.ObjectStorageService;
@@ -35,6 +40,8 @@ import java.util.stream.Collectors;
 public class PostService {
 
     private static final int MAX_QUERY_LENGTH = 100;
+    /** CIELAB distance (deltaE76) under which a post color counts as "close" to the searched one. */
+    private static final double COLOR_MATCH_DISTANCE = 35.0; // 25.0
 
     private final PostRepository posts;
     private final PostMapper mapper;
@@ -44,10 +51,11 @@ public class PostService {
     private final SavedPostLookup savedPosts;
     private final ObjectStorageService storage;
     private final TransactionTemplate tx;
+    private final PostColorRepository postColors;
 
     public PostService(PostRepository posts, PostMapper mapper, UploadService uploadService,
                        UserService userService, ProfileSummaryMapper profileMapper,
-                       SavedPostLookup savedPosts, ObjectStorageService storage, TransactionTemplate tx) {
+                       SavedPostLookup savedPosts, ObjectStorageService storage, TransactionTemplate tx, PostColorRepository postColors) {
         this.posts = posts;
         this.mapper = mapper;
         this.uploadService = uploadService;
@@ -56,6 +64,7 @@ public class PostService {
         this.savedPosts = savedPosts;
         this.storage = storage;
         this.tx = tx;
+        this.postColors = postColors;
     }
 
     @Transactional
@@ -68,6 +77,7 @@ public class PostService {
         } catch (DataIntegrityViolationException e) {
             throw new ConflictException("This upload is already attached to a post");
         }
+        postColors.saveAll(PostColor.listOf(post.getId(), req.colors()));
         return mapper.toResponse(post, false);
     }
 
@@ -137,19 +147,43 @@ public class PostService {
                 limit, viewerId);
     }
 
-    /** Case-insensitive substring match on title or description, newest first. */
+    /**
+     * Keyword (case-insensitive substring of title/description), color, or both; at least one.
+     * Keyword only: newest first. With a color: best color match first (closest stored color).
+     */
     @Transactional(readOnly = true)
-    public CursorPage<PostResponse> search(String query, String cursor, int size, UUID viewerId) {
+    public CursorPage<PostResponse> search(String query, String color, String cursor, int size, UUID viewerId) {
         String q = query == null ? "" : query.trim();
-        if (q.isEmpty()) {
-            throw new BadRequestException("Search query cannot be blank");
+        boolean hasColor = color != null && !color.isBlank();
+        if (q.isEmpty() && !hasColor) {
+            throw new BadRequestException("Provide a keyword, a color, or both");
         }
         if (q.length() > MAX_QUERY_LENGTH) {
             throw new BadRequestException("Search query is too long");
         }
         int limit = PageCursor.clampSize(size);
-        PageCursor after = PageCursor.decode(cursor);
-        return page(posts.search(likePattern(q), after.createdAt(), after.id(), limit + 1), limit, viewerId);
+
+        if (!hasColor) {
+            PageCursor after = PageCursor.decode(cursor);
+            return page(posts.search(likePattern(q), after.createdAt(), after.id(), limit + 1), limit, viewerId);
+        }
+        return colorPage(q, ColorLab.fromHex(color), ColorCursor.decode(cursor), limit, viewerId);
+    }
+
+    /** Ranked by color distance; the cursor is the last returned match's (distance, id). */
+    private CursorPage<PostResponse> colorPage(String q, ColorLab target, ColorCursor after,
+                                               int limit, UUID viewerId) {
+        List<ColorMatch> fetched = posts.searchByColor(q.isEmpty() ? null : likePattern(q),
+                target.l(), target.a(), target.b(), COLOR_MATCH_DISTANCE,
+                after.distance(), after.id(), limit + 1);
+
+        boolean hasMore = fetched.size() > limit;
+        List<ColorMatch> matches = hasMore ? fetched.subList(0, limit) : fetched;
+        List<Post> rows = posts.findAllInOrder(matches.stream().map(ColorMatch::getPostId).toList());
+
+        ColorMatch last = matches.isEmpty() ? null : matches.getLast();
+        String next = hasMore ? new ColorCursor(last.getDistance(), last.getPostId()).encode() : null;
+        return new CursorPage<>(mapper.toResponses(rows, viewerId), next);
     }
 
     private CursorPage<PostDetailResponse> detailPage(List<Post> fetched, int limit, UUID viewerId) {
