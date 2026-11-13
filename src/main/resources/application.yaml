@@ -12,6 +12,10 @@ spring:
     password: ${DB_PASSWORD}
     hikari:
       maximum-pool-size: 5
+      minimum-idle: 0          # don't keep idle connections
+      idle-timeout: 60000      # close idle connections after 60s
+      max-lifetime: 1500000    # 25 min
+      keepalive-time: 0
   jpa:
     open-in-view: false
     hibernate:
@@ -52,6 +56,9 @@ app:
     secret-access-key: ${R2_SECRET_ACCESS_KEY}
     public-base-url: ${R2_PUBLIC_BASE_URL}
     presign-expiry-seconds: 300
+  upload-cleanup:
+    delay: ${UPLOAD_CLEANUP_DELAY:PT48H}
+    initial-delay: ${UPLOAD_CLEANUP_INITIAL_DELAY:PT5M}
 
 management:
   endpoints:
@@ -65,4 +72,6 @@ management:
         enabled: true
   health:
     redis:
+      enabled: false
+    db:
       enabled: false

@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.time.Instant;
 
-/** Hourly sweep of uploads that were never used. Objects under tmp/ expire on their own (R2 lifecycle rule). */
+/** Sweep of uploads that were never used. Objects under tmp/ expire on their own (R2 lifecycle rule). */
 @Component
 public class UploadCleanupJob {
 
@@ -28,7 +28,9 @@ public class UploadCleanupJob {
         this.storage = storage;
     }
 
-    @Scheduled(fixedDelayString = "PT1H", initialDelayString = "PT5M")
+    @Scheduled(
+            fixedDelayString = "${app.upload-cleanup.delay:PT48H}",
+            initialDelayString = "${app.upload-cleanup.initial-delay:PT5M}")
     public void run() {
         Instant now = Instant.now();
 
